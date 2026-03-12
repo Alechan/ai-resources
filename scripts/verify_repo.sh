@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+catalog="$repo_root/docs/RESOURCE_CATALOG.md"
+errors=0
+
+check_file() {
+  local rel="$1"
+  if [ ! -f "$repo_root/$rel" ]; then
+    echo "[missing file] $rel"
+    errors=1
+  fi
+}
+
+check_dir() {
+  local rel="$1"
+  if [ ! -d "$repo_root/$rel" ]; then
+    echo "[missing dir] $rel"
+    errors=1
+  fi
+}
+
+check_executable() {
+  local rel="$1"
+  if [ ! -x "$repo_root/$rel" ]; then
+    echo "[not executable] $rel"
+    errors=1
+  fi
+}
+
+require_catalog_entry() {
+  local name="$1"
+  local type="$2"
+  local needle="| $name | $type |"
+  if ! grep -Fq "$needle" "$catalog"; then
+    echo "[catalog missing] $type $name"
+    errors=1
+  fi
+}
+
+required_dirs=(
+  "docs"
+  "skills"
+  "skills/gdrivectl-drive-ops"
+  "skills/datagrip-datasources"
+  "skills/datagrip-datasources/evals"
+  "agents"
+  "tools"
+  "tools/gdrivectl"
+  "playbooks"
+  "scripts"
+)
+
+required_files=(
+  "README.md"
+  "AGENTS.md"
+  "CHANGELOG.md"
+  "docs/CONVENTIONS.md"
+  "docs/RESOURCE_CATALOG.md"
+  "skills/gdrivectl-drive-ops/SKILL.md"
+  "skills/datagrip-datasources/SKILL.md"
+  "skills/datagrip-datasources/evals/v1-prompts.md"
+  "agents/gdrivectl-drive-ops.md"
+  "agents/datagrip-datasources.md"
+  "tools/gdrivectl/README.md"
+  "playbooks/datagrip-datasource-update.md"
+  "scripts/install_codex_skill.sh"
+  "scripts/install_claude_agent.sh"
+  "scripts/verify_repo.sh"
+)
+
+for dir in "${required_dirs[@]}"; do
+  check_dir "$dir"
+done
+
+for file in "${required_files[@]}"; do
+  check_file "$file"
+done
+
+for skill_dir in "$repo_root"/skills/*; do
+  [ -d "$skill_dir" ] || continue
+  skill_name="$(basename "$skill_dir")"
+  if [ ! -f "$skill_dir/SKILL.md" ]; then
+    echo "[missing file] skills/$skill_name/SKILL.md"
+    errors=1
+  fi
+  require_catalog_entry "$skill_name" "skill"
+done
+
+for agent_file in "$repo_root"/agents/*.md; do
+  [ -f "$agent_file" ] || continue
+  agent_name="$(basename "$agent_file" .md)"
+  require_catalog_entry "$agent_name" "agent"
+done
+
+check_executable "scripts/install_codex_skill.sh"
+check_executable "scripts/install_claude_agent.sh"
+check_executable "scripts/verify_repo.sh"
+
+if [ "$errors" -ne 0 ]; then
+  echo "Repository verification failed."
+  exit 1
+fi
+
+echo "Repository verification passed."
