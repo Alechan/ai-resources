@@ -1,9 +1,25 @@
 # gdrivectl Tool Resource
 
-## Install
+`gdrivectl` is maintained in this repository under `tools/gdrivectl/src`.
+
+## Build and Install
 
 ```bash
-go install github.com/Alechan/gdrivectl/cmd/gdrivectl@latest
+go install github.com/Alechan/ai-resources/tools/gdrivectl/src/cmd/gdrivectl@latest
+```
+
+Local contributor install from this repository:
+
+```bash
+cd tools/gdrivectl/src
+go install ./cmd/gdrivectl
+```
+
+## Validate Source
+
+```bash
+cd tools/gdrivectl/src
+go test ./...
 ```
 
 ## Verify
@@ -11,6 +27,11 @@ go install github.com/Alechan/gdrivectl/cmd/gdrivectl@latest
 ```bash
 gdrivectl --help
 ```
+
+## Deprecation Note
+
+- The previous standalone `gdrivectl` repository is deprecated.
+- This repository is now the canonical source for code, docs, and automation around `gdrivectl`.
 
 ## Troubleshooting
 

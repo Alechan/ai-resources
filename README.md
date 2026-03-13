@@ -2,6 +2,8 @@
 
 Reusable AI resources for Codex and Claude: skills, agents, tool wrappers, playbooks, and installers.
 
+This repository is also the canonical home for `gdrivectl` source code at `tools/gdrivectl/src`.
+
 ## Start Here
 
 New chats in this repository should read these files first, in order:
@@ -33,13 +35,22 @@ New chats in this repository should read these files first, in order:
 bash scripts/verify_repo.sh
 ```
 
-2. Install a Codex skill from this repo:
+2. Build and verify local `gdrivectl` from this repo:
+
+```bash
+cd tools/gdrivectl/src
+go test ./...
+go install github.com/Alechan/ai-resources/tools/gdrivectl/src/cmd/gdrivectl@latest
+gdrivectl --help
+```
+
+3. Install a Codex skill from this repo:
 
 ```bash
 bash scripts/install_codex_skill.sh gdrivectl-drive-ops skills/gdrivectl-drive-ops/SKILL.md
 ```
 
-3. Install a Claude agent from this repo:
+4. Install a Claude agent from this repo:
 
 ```bash
 bash scripts/install_claude_agent.sh agents/gdrivectl-drive-ops.md gdrivectl-drive-ops

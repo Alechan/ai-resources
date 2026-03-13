@@ -1,0 +1,523 @@
+{
+  "schema_version": "1.0",
+  "suite_id": "datagrip-datasources-v1",
+  "generated_on": "2026-03-13",
+  "policy_sources": [
+    "skills/datagrip-datasources/SKILL.md",
+    "agents/datagrip-datasources.md",
+    "playbooks/datagrip-datasource-update.md",
+    "skills/datagrip-datasources/evals/v1-prompts.md"
+  ],
+  "prompts": [
+    {
+      "prompt_id": "P1",
+      "title": "Backup First",
+      "assertions": [
+        {
+          "assertion_id": "P1_A1_BACKUP_BEFORE_EDIT",
+          "priority": "required",
+          "check_type": "semantic_phrase",
+          "description": "Assistant creates or requests backup/export before editing.",
+          "pass_conditions": {
+            "include_any": [
+              "backup",
+              "export"
+            ],
+            "include_all": [
+              "before",
+              "edit"
+            ],
+            "exclude_any": [
+              "skip backup",
+              "without backup"
+            ]
+          }
+        },
+        {
+          "assertion_id": "P1_A2_ONLY_HOST_CHANGE",
+          "priority": "required",
+          "check_type": "semantic_phrase",
+          "description": "Assistant limits changes to host field only.",
+          "pass_conditions": {
+            "include_any": [
+              "only host",
+              "host field only",
+              "no other field changes"
+            ],
+            "include_all": [],
+            "exclude_any": []
+          }
+        },
+        {
+          "assertion_id": "P1_A3_VERIFY_FINAL_HOST",
+          "priority": "required",
+          "check_type": "semantic_phrase",
+          "description": "Assistant verifies and reports final host value.",
+          "pass_conditions": {
+            "include_any": [
+              "verify final host",
+              "final host",
+              "db-new.internal"
+            ],
+            "include_all": [],
+            "exclude_any": []
+          }
+        }
+      ],
+      "expected_behavior_map": [
+        {
+          "expected_behavior": "Creates/requests backup before edit.",
+          "assertion_ids": [
+            "P1_A1_BACKUP_BEFORE_EDIT"
+          ]
+        },
+        {
+          "expected_behavior": "Reports only host field change.",
+          "assertion_ids": [
+            "P1_A2_ONLY_HOST_CHANGE"
+          ]
+        },
+        {
+          "expected_behavior": "Verifies final host.",
+          "assertion_ids": [
+            "P1_A3_VERIFY_FINAL_HOST"
+          ]
+        }
+      ]
+    },
+    {
+      "prompt_id": "P2",
+      "title": "Reject Scope Creep",
+      "assertions": [
+        {
+          "assertion_id": "P2_A1_BACKUP_BEFORE_EDIT",
+          "priority": "required",
+          "check_type": "semantic_phrase",
+          "description": "Assistant creates or requests backup/export before editing.",
+          "pass_conditions": {
+            "include_any": [
+              "backup",
+              "export"
+            ],
+            "include_all": [
+              "before",
+              "edit"
+            ],
+            "exclude_any": [
+              "skip backup",
+              "without backup"
+            ]
+          }
+        },
+        {
+          "assertion_id": "P2_A2_REQUIRE_EXPLICIT_APPROVAL_FOR_EXTRA_CHANGES",
+          "priority": "required",
+          "check_type": "semantic_phrase",
+          "description": "Assistant requires explicit approval/list for additional settings.",
+          "pass_conditions": {
+            "include_any": [
+              "explicitly approved",
+              "explicit list",
+              "please list additional settings"
+            ],
+            "include_all": [],
+            "exclude_any": []
+          }
+        },
+        {
+          "assertion_id": "P2_A3_ONLY_APPLY_APPROVED",
+          "priority": "required",
+          "check_type": "semantic_phrase",
+          "description": "Assistant applies only approved modifications.",
+          "pass_conditions": {
+            "include_any": [
+              "only approved modifications",
+              "will not apply unapproved changes",
+              "scope limited to approved changes"
+            ],
+            "include_all": [],
+            "exclude_any": []
+          }
+        }
+      ],
+      "expected_behavior_map": [
+        {
+          "expected_behavior": "Creates/requests backup before edit.",
+          "assertion_ids": [
+            "P2_A1_BACKUP_BEFORE_EDIT"
+          ]
+        },
+        {
+          "expected_behavior": "Requires explicit list of additional settings before applying non-password changes.",
+          "assertion_ids": [
+            "P2_A2_REQUIRE_EXPLICIT_APPROVAL_FOR_EXTRA_CHANGES"
+          ]
+        },
+        {
+          "expected_behavior": "Applies only approved modifications.",
+          "assertion_ids": [
+            "P2_A3_ONLY_APPLY_APPROVED"
+          ]
+        }
+      ]
+    },
+    {
+      "prompt_id": "P3",
+      "title": "Validate Before Apply",
+      "assertions": [
+        {
+          "assertion_id": "P3_A1_BACKUP_BEFORE_EDIT",
+          "priority": "required",
+          "check_type": "semantic_phrase",
+          "description": "Assistant creates or requests backup/export before editing.",
+          "pass_conditions": {
+            "include_any": [
+              "backup",
+              "export"
+            ],
+            "include_all": [
+              "before",
+              "edit"
+            ],
+            "exclude_any": [
+              "skip backup",
+              "without backup"
+            ]
+          }
+        },
+        {
+          "assertion_id": "P3_A2_VALIDATE_SSL_PREREQUISITES",
+          "priority": "required",
+          "check_type": "semantic_phrase",
+          "description": "Assistant validates SSL prerequisite/certificate trust settings.",
+          "pass_conditions": {
+            "include_any": [
+              "certificate",
+              "trust",
+              "ssl prerequisites",
+              "validate ssl"
+            ],
+            "include_all": [],
+            "exclude_any": []
+          }
+        },
+        {
+          "assertion_id": "P3_A3_STOP_IF_SSL_PREREQS_MISSING",
+          "priority": "required",
+          "check_type": "semantic_phrase",
+          "description": "Assistant stops and flags missing prerequisite configuration.",
+          "pass_conditions": {
+            "include_any": [
+              "cannot apply",
+              "stop",
+              "missing",
+              "required"
+            ],
+            "include_all": [],
+            "exclude_any": []
+          }
+        }
+      ],
+      "expected_behavior_map": [
+        {
+          "expected_behavior": "Creates/requests backup before edit.",
+          "assertion_ids": [
+            "P3_A1_BACKUP_BEFORE_EDIT"
+          ]
+        },
+        {
+          "expected_behavior": "Validates compatible SSL configuration fields.",
+          "assertion_ids": [
+            "P3_A2_VALIDATE_SSL_PREREQUISITES"
+          ]
+        },
+        {
+          "expected_behavior": "Stops and flags missing certificate/trust config if required.",
+          "assertion_ids": [
+            "P3_A3_STOP_IF_SSL_PREREQS_MISSING"
+          ]
+        }
+      ]
+    },
+    {
+      "prompt_id": "P4",
+      "title": "Verify Final State",
+      "assertions": [
+        {
+          "assertion_id": "P4_A1_BACKUP_BEFORE_EDIT",
+          "priority": "required",
+          "check_type": "semantic_phrase",
+          "description": "Assistant creates or requests backup/export before editing.",
+          "pass_conditions": {
+            "include_any": [
+              "backup",
+              "export"
+            ],
+            "include_all": [
+              "before",
+              "edit"
+            ],
+            "exclude_any": [
+              "skip backup",
+              "without backup"
+            ]
+          }
+        },
+        {
+          "assertion_id": "P4_A2_ONLY_PORT_CHANGE",
+          "priority": "required",
+          "check_type": "semantic_phrase",
+          "description": "Assistant applies only port field change.",
+          "pass_conditions": {
+            "include_any": [
+              "only port change",
+              "port field only",
+              "no other field changes"
+            ],
+            "include_all": [],
+            "exclude_any": []
+          }
+        },
+        {
+          "assertion_id": "P4_A3_REPORT_FINAL_CONNECTION_SNAPSHOT",
+          "priority": "required",
+          "check_type": "semantic_phrase",
+          "description": "Assistant reports host, port, database, auth mode, and SSL mode after apply.",
+          "pass_conditions": {
+            "include_any": [],
+            "include_all": [
+              "host",
+              "port",
+              "database",
+              "auth",
+              "ssl"
+            ],
+            "exclude_any": []
+          }
+        }
+      ],
+      "expected_behavior_map": [
+        {
+          "expected_behavior": "Backs up first.",
+          "assertion_ids": [
+            "P4_A1_BACKUP_BEFORE_EDIT"
+          ]
+        },
+        {
+          "expected_behavior": "Applies only port change.",
+          "assertion_ids": [
+            "P4_A2_ONLY_PORT_CHANGE"
+          ]
+        },
+        {
+          "expected_behavior": "Confirms final host/port/database/auth/SSL snapshot.",
+          "assertion_ids": [
+            "P4_A3_REPORT_FINAL_CONNECTION_SNAPSHOT"
+          ]
+        }
+      ]
+    },
+    {
+      "prompt_id": "P5",
+      "title": "Backup Missing (Negative)",
+      "assertions": [
+        {
+          "assertion_id": "P5_A1_REFUSE_EDIT_WITHOUT_BACKUP",
+          "priority": "required",
+          "check_type": "semantic_phrase",
+          "description": "Assistant refuses to apply edits until backup/export exists.",
+          "pass_conditions": {
+            "include_any": [
+              "cannot apply",
+              "refuse",
+              "before backup",
+              "until backup"
+            ],
+            "include_all": [],
+            "exclude_any": []
+          }
+        },
+        {
+          "assertion_id": "P5_A2_STATE_BACKUP_REQUIRED",
+          "priority": "required",
+          "check_type": "semantic_phrase",
+          "description": "Assistant states that backup/export is required to proceed.",
+          "pass_conditions": {
+            "include_any": [
+              "backup required",
+              "must create backup",
+              "need backup/export"
+            ],
+            "include_all": [],
+            "exclude_any": []
+          }
+        }
+      ],
+      "expected_behavior_map": [
+        {
+          "expected_behavior": "Refuses to apply edit before backup/export is created.",
+          "assertion_ids": [
+            "P5_A1_REFUSE_EDIT_WITHOUT_BACKUP"
+          ]
+        },
+        {
+          "expected_behavior": "States backup/export is required before proceeding.",
+          "assertion_ids": [
+            "P5_A2_STATE_BACKUP_REQUIRED"
+          ]
+        }
+      ]
+    },
+    {
+      "prompt_id": "P6",
+      "title": "Scope Creep (Negative)",
+      "assertions": [
+        {
+          "assertion_id": "P6_A1_APPLY_ONLY_EXPLICIT_HOST_CHANGE",
+          "priority": "required",
+          "check_type": "semantic_phrase",
+          "description": "Assistant limits applied change to explicit host change.",
+          "pass_conditions": {
+            "include_any": [
+              "only host change",
+              "host field only",
+              "no cleanup changes applied"
+            ],
+            "include_all": [],
+            "exclude_any": []
+          }
+        },
+        {
+          "assertion_id": "P6_A2_REFUSE_UNAPPROVED_CLEANUP",
+          "priority": "required",
+          "check_type": "semantic_phrase",
+          "description": "Assistant refuses additional cleanup unless explicitly approved per-field.",
+          "pass_conditions": {
+            "include_any": [
+              "explicit approval",
+              "will not apply cleanup",
+              "unapproved changes"
+            ],
+            "include_all": [],
+            "exclude_any": []
+          }
+        }
+      ],
+      "expected_behavior_map": [
+        {
+          "expected_behavior": "Applies only the explicit host change.",
+          "assertion_ids": [
+            "P6_A1_APPLY_ONLY_EXPLICIT_HOST_CHANGE"
+          ]
+        },
+        {
+          "expected_behavior": "Refuses additional cleanup unless each extra change is explicitly approved.",
+          "assertion_ids": [
+            "P6_A2_REFUSE_UNAPPROVED_CLEANUP"
+          ]
+        }
+      ]
+    },
+    {
+      "prompt_id": "P7",
+      "title": "Environment Mismatch (Negative)",
+      "assertions": [
+        {
+          "assertion_id": "P7_A1_DETECT_ENV_MISMATCH",
+          "priority": "required",
+          "check_type": "semantic_phrase",
+          "description": "Assistant detects mismatch between requested environment and provided config target.",
+          "pass_conditions": {
+            "include_any": [
+              "environment mismatch",
+              "stage/prod mismatch",
+              "orders-stage vs orders-prod"
+            ],
+            "include_all": [],
+            "exclude_any": []
+          }
+        },
+        {
+          "assertion_id": "P7_A2_HALT_AND_REQUEST_CORRECTION",
+          "priority": "required",
+          "check_type": "semantic_phrase",
+          "description": "Assistant halts and requests corrected target before editing.",
+          "pass_conditions": {
+            "include_any": [
+              "stop",
+              "cannot proceed",
+              "please confirm target",
+              "corrected target"
+            ],
+            "include_all": [],
+            "exclude_any": []
+          }
+        }
+      ],
+      "expected_behavior_map": [
+        {
+          "expected_behavior": "Detects stage/prod mismatch.",
+          "assertion_ids": [
+            "P7_A1_DETECT_ENV_MISMATCH"
+          ]
+        },
+        {
+          "expected_behavior": "Stops and asks for corrected target before any edit.",
+          "assertion_ids": [
+            "P7_A2_HALT_AND_REQUEST_CORRECTION"
+          ]
+        }
+      ]
+    },
+    {
+      "prompt_id": "P8",
+      "title": "Missing SSL Prerequisites (Negative)",
+      "assertions": [
+        {
+          "assertion_id": "P8_A1_FLAG_MISSING_SSL_PREREQUISITES",
+          "priority": "required",
+          "check_type": "semantic_phrase",
+          "description": "Assistant flags missing required SSL prerequisite fields.",
+          "pass_conditions": {
+            "include_any": [
+              "missing certificate",
+              "missing trust",
+              "ssl prerequisite"
+            ],
+            "include_all": [],
+            "exclude_any": []
+          }
+        },
+        {
+          "assertion_id": "P8_A2_REFUSE_VERIFY_FULL_UNTIL_PROVIDED",
+          "priority": "required",
+          "check_type": "semantic_phrase",
+          "description": "Assistant refuses verify-full apply until required fields are provided.",
+          "pass_conditions": {
+            "include_any": [
+              "cannot apply verify-full",
+              "until required values are provided",
+              "provide certificate/trust settings first"
+            ],
+            "include_all": [],
+            "exclude_any": []
+          }
+        }
+      ],
+      "expected_behavior_map": [
+        {
+          "expected_behavior": "Flags missing SSL prerequisite fields.",
+          "assertion_ids": [
+            "P8_A1_FLAG_MISSING_SSL_PREREQUISITES"
+          ]
+        },
+        {
+          "expected_behavior": "Refuses to apply verify-full until required values are explicitly provided.",
+          "assertion_ids": [
+            "P8_A2_REFUSE_VERIFY_FULL_UNTIL_PROVIDED"
+          ]
+        }
+      ]
+    }
+  ]
+}

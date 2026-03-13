@@ -40,3 +40,8 @@ Every agent file in `agents/` must include:
 - Codex skill target path: `~/.codex/skills/<skill-name>/SKILL.md`
 - Claude agent target path: `~/.claude/agents/<agent-name>.md`
 - Installers should default to symlink mode for easier updates from this repository.
+
+## Tool Source Layout
+
+- If a tool is maintained in this repo, store executable source in `tools/<tool-name>/src/`.
+- Keep `tools/<tool-name>/README.md` focused on local build/install/verify instructions and troubleshooting.

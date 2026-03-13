@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.2"
+
+      - name: Verify repository structure
+        run: bash scripts/verify_repo.sh
+
+      - name: Run gdrivectl tests
+        run: cd tools/gdrivectl/src && go test ./...
+
+      - name: Prepare DataGrip eval run id
+        run: echo "DG_EVAL_RUN_ID=ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
+
+      - name: Run DataGrip eval suite (deterministic mock runner)
+        run: |
+          python3 scripts/run_datagrip_evals.py \
+            --runner-cmd "python3 scripts/mock_datagrip_eval_runner.py" \
+            --run-id "${DG_EVAL_RUN_ID}"
+
+      - name: Score DataGrip eval suite (blocking gate)
+        run: |
+          python3 scripts/score_datagrip_evals.py \
+            --run-dir "skills/datagrip-datasources/evals/artifacts/${DG_EVAL_RUN_ID}" \
+            --fail-on-required
+
+      - name: Upload DataGrip eval artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: datagrip-evals-${{ env.DG_EVAL_RUN_ID }}
+          path: skills/datagrip-datasources/evals/artifacts/${{ env.DG_EVAL_RUN_ID }}
+          if-no-files-found: warn

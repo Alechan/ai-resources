@@ -14,6 +14,7 @@ Every new chat working in this repository must read these files first, in order:
 - Keep reusable skills in `skills/<skill-name>/SKILL.md`.
 - Keep Claude-facing agent specs in `agents/<agent-name>.md`.
 - Keep tool wrappers and install notes in `tools/<tool-name>/README.md`.
+- Keep first-party tool source under `tools/<tool-name>/src/` when the tool is maintained in this repo.
 - Keep operational runbooks in `playbooks/*.md`.
 - Any new skill or agent must be added to `docs/RESOURCE_CATALOG.md`.
 - Run `bash scripts/verify_repo.sh` after changes and before commit.

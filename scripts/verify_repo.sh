@@ -48,6 +48,10 @@ required_dirs=(
   "agents"
   "tools"
   "tools/gdrivectl"
+  "tools/gdrivectl/src"
+  "tools/gdrivectl/src/cmd"
+  "tools/gdrivectl/src/cmd/gdrivectl"
+  "tools/gdrivectl/src/internal"
   "playbooks"
   "scripts"
 )
@@ -64,10 +68,15 @@ required_files=(
   "agents/gdrivectl-drive-ops.md"
   "agents/datagrip-datasources.md"
   "tools/gdrivectl/README.md"
+  "tools/gdrivectl/src/go.mod"
+  "tools/gdrivectl/src/cmd/gdrivectl/main.go"
   "playbooks/datagrip-datasource-update.md"
   "scripts/install_codex_skill.sh"
   "scripts/install_claude_agent.sh"
   "scripts/verify_repo.sh"
+  "scripts/run_datagrip_evals.py"
+  "scripts/score_datagrip_evals.py"
+  "scripts/mock_datagrip_eval_runner.py"
 )
 
 for dir in "${required_dirs[@]}"; do
@@ -97,6 +106,9 @@ done
 check_executable "scripts/install_codex_skill.sh"
 check_executable "scripts/install_claude_agent.sh"
 check_executable "scripts/verify_repo.sh"
+check_executable "scripts/run_datagrip_evals.py"
+check_executable "scripts/score_datagrip_evals.py"
+check_executable "scripts/mock_datagrip_eval_runner.py"
 
 if [ "$errors" -ne 0 ]; then
   echo "Repository verification failed."

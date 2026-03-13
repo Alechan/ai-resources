@@ -12,7 +12,7 @@ Bootstrap this repository as a single source of truth for reusable AI resources 
 - This repo currently has no users.
 - Backward compatibility is not required yet.
 - You can reorganize structure now without migration constraints.
-- `gdrivectl` remains its own codebase; this repo references and integrates it as a resource.
+- `gdrivectl` is maintained directly in this repository (under `tools/gdrivectl/src`).
 
 ## End State (Definition)
 
@@ -101,7 +101,7 @@ Create `docs/RESOURCE_CATALOG.md` with a table:
 Create:
 
 - `tools/gdrivectl/README.md` with:
-  - install command: `go install github.com/Alechan/gdrivectl/cmd/gdrivectl@latest`
+  - install command: `go install github.com/Alechan/ai-resources/tools/gdrivectl/src/cmd/gdrivectl@latest`
   - verification: `gdrivectl --help`
   - known troubleshooting pointers
 - `skills/gdrivectl-drive-ops/SKILL.md` and `agents/gdrivectl-drive-ops.md` (copy or adapt from canonical source)
