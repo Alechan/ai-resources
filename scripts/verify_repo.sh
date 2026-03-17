@@ -47,6 +47,8 @@ required_dirs=(
   "skills/datagrip-datasources/evals"
   "agents"
   "tools"
+  "tools/claude-statusline"
+  "tools/claude-statusline/src"
   "tools/gdrivectl"
   "tools/gdrivectl/src"
   "tools/gdrivectl/src/cmd"
@@ -67,12 +69,16 @@ required_files=(
   "skills/datagrip-datasources/evals/v1-prompts.md"
   "agents/gdrivectl-drive-ops.md"
   "agents/datagrip-datasources.md"
+  "tools/claude-statusline/README.md"
+  "tools/claude-statusline/src/statusline-command.sh"
   "tools/gdrivectl/README.md"
   "tools/gdrivectl/src/go.mod"
   "tools/gdrivectl/src/cmd/gdrivectl/main.go"
   "playbooks/datagrip-datasource-update.md"
   "scripts/install_codex_skill.sh"
   "scripts/install_claude_agent.sh"
+  "scripts/install_claude_statusline.sh"
+  "scripts/lint_shell.sh"
   "scripts/verify_repo.sh"
   "scripts/run_datagrip_evals.py"
   "scripts/score_datagrip_evals.py"
@@ -105,10 +111,19 @@ done
 
 check_executable "scripts/install_codex_skill.sh"
 check_executable "scripts/install_claude_agent.sh"
+check_executable "scripts/install_claude_statusline.sh"
+check_executable "scripts/lint_shell.sh"
 check_executable "scripts/verify_repo.sh"
 check_executable "scripts/run_datagrip_evals.py"
 check_executable "scripts/score_datagrip_evals.py"
 check_executable "scripts/mock_datagrip_eval_runner.py"
+check_executable "tools/claude-statusline/src/statusline-command.sh"
+
+require_catalog_entry "claude-statusline" "tool"
+
+if ! "$repo_root/scripts/lint_shell.sh"; then
+  errors=1
+fi
 
 if [ "$errors" -ne 0 ]; then
   echo "Repository verification failed."

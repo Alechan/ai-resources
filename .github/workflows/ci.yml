@@ -21,6 +21,9 @@ jobs:
       - name: Verify repository structure
         run: bash scripts/verify_repo.sh
 
+      - name: Run shell lint
+        run: bash scripts/lint_shell.sh
+
       - name: Run gdrivectl tests
         run: cd tools/gdrivectl/src && go test ./...
 
