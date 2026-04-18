@@ -54,6 +54,17 @@ type v1LogEvent struct {
 	EventID string        `json:"event_id"`
 	Columns []interface{} `json:"columns"`
 	ID      string        `json:"id"`
+	Event   *v1EventBody  `json:"event"`
+}
+
+// v1EventBody is the full log event body returned in the "event" field.
+// Columns are often null; this carries the reliable values.
+type v1EventBody struct {
+	Status    string         `json:"status"`
+	Timestamp string         `json:"timestamp"`
+	Host      string         `json:"host"`
+	Service   string         `json:"service"`
+	Custom    map[string]any `json:"custom"`
 }
 
 // LogsQueryService queries DataDog logs.
@@ -67,8 +78,7 @@ func NewLogsQueryService(dd *datadogapi.Client) *LogsQueryService {
 }
 
 // Run executes a logs query using DataDog's browser UI endpoint.
-//
-// Column layout returned by the API: [0]=status, [1]=timestamp, [2]=host, [3]=service, [4]=message
+// Column values are used when present; event body fields are used as fallback.
 func (s *LogsQueryService) Run(ctx context.Context, input LogsQueryInput) (LogsQueryResult, error) {
 	fromMs, err := timeutil.ParseToUnixMs(input.From)
 	if err != nil {
@@ -121,22 +131,7 @@ func (s *LogsQueryService) Run(ctx context.Context, input LogsQueryInput) (LogsQ
 
 	result := LogsQueryResult{}
 	for _, ev := range raw.Result.Events {
-		attrs := LogEventAttributes{}
-		if len(ev.Columns) > 0 && ev.Columns[0] != nil {
-			attrs.Status, _ = ev.Columns[0].(string)
-		}
-		if len(ev.Columns) > 1 && ev.Columns[1] != nil {
-			attrs.Timestamp, _ = ev.Columns[1].(string)
-		}
-		if len(ev.Columns) > 2 && ev.Columns[2] != nil {
-			attrs.Host, _ = ev.Columns[2].(string)
-		}
-		if len(ev.Columns) > 3 && ev.Columns[3] != nil {
-			attrs.Service, _ = ev.Columns[3].(string)
-		}
-		if len(ev.Columns) > 4 && ev.Columns[4] != nil {
-			attrs.Message, _ = ev.Columns[4].(string)
-		}
+		attrs := extractEventAttrs(ev)
 		result.Data = append(result.Data, LogEvent{
 			ID:         ev.ID,
 			Attributes: attrs,
@@ -144,4 +139,57 @@ func (s *LogsQueryService) Run(ctx context.Context, input LogsQueryInput) (LogsQ
 	}
 	result.NextCursor = raw.Result.Paging.After
 	return result, nil
+}
+
+// extractEventAttrs builds LogEventAttributes from a v1 event, preferring
+// column values but falling back to the event body when columns are null.
+func extractEventAttrs(ev v1LogEvent) LogEventAttributes {
+	colStr := func(i int) string {
+		if i < len(ev.Columns) && ev.Columns[i] != nil {
+			s, _ := ev.Columns[i].(string)
+			return s
+		}
+		return ""
+	}
+
+	attrs := LogEventAttributes{
+		Status:    colStr(0),
+		Timestamp: colStr(1),
+		Host:      colStr(2),
+		Service:   colStr(3),
+		Message:   colStr(4),
+	}
+
+	// Fall back to event body fields when columns are null.
+	if ev.Event != nil {
+		if attrs.Status == "" {
+			attrs.Status = ev.Event.Status
+		}
+		if attrs.Timestamp == "" {
+			attrs.Timestamp = ev.Event.Timestamp
+		}
+		if attrs.Host == "" {
+			attrs.Host = ev.Event.Host
+		}
+		if attrs.Service == "" {
+			attrs.Service = ev.Event.Service
+		}
+		if attrs.Message == "" {
+			attrs.Message = extractMessage(ev.Event.Custom)
+		}
+	}
+	return attrs
+}
+
+// extractMessage finds the log message from the custom fields map.
+// Different services use different field names.
+func extractMessage(custom map[string]any) string {
+	for _, key := range []string{"message", "msg", "MESSAGE", "log", "body", "text"} {
+		if v, ok := custom[key]; ok {
+			if s, ok := v.(string); ok && s != "" {
+				return s
+			}
+		}
+	}
+	return ""
 }
