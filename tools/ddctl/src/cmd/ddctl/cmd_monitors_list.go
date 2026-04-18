@@ -53,8 +53,8 @@ func runMonitorsListCmd(ctx context.Context, svcs app.Services, cfg app.Config, 
 
 	for _, m := range monitors {
 		tags := strings.Join(m.Tags, ",")
-		fmt.Fprintf(stdout, "[%d] %-10s %-8s %s  tags:%s\n",
-			m.ID, m.OverallState, m.Type, m.Name, tags)
+		fmt.Fprintf(stdout, "[%d] %-10s %-8s %s  tags:%s\n  %s\n",
+			m.ID, m.OverallState, m.Type, m.Name, tags, m.URL)
 	}
 	return fail.CodeOK
 }

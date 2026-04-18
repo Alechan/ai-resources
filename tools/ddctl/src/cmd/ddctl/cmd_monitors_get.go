@@ -51,6 +51,7 @@ func runMonitorsGetCmd(ctx context.Context, svcs app.Services, cfg app.Config, a
 	fmt.Fprintf(stdout, "Name:   %s\n", m.Name)
 	fmt.Fprintf(stdout, "Type:   %s\n", m.Type)
 	fmt.Fprintf(stdout, "State:  %s\n", m.OverallState)
+	fmt.Fprintf(stdout, "URL:    %s\n", m.URL)
 	fmt.Fprintf(stdout, "Tags:   %s\n", strings.Join(m.Tags, ", "))
 	fmt.Fprintf(stdout, "Query:  %s\n", m.Query)
 	if m.Message != "" {

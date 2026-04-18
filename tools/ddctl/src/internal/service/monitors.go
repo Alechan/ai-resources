@@ -16,6 +16,7 @@ type Monitor struct {
 	Tags         []string `json:"tags"`
 	Message      string   `json:"message"`
 	Query        string   `json:"query"`
+	URL          string   `json:"url,omitempty"`
 }
 
 // MonitorsListResult is the response for listing monitors.
@@ -30,12 +31,13 @@ type MonitorsGetResult struct {
 
 // MonitorsListService lists DataDog monitors.
 type MonitorsListService struct {
-	dd *datadogapi.Client
+	dd   *datadogapi.Client
+	site string
 }
 
 // NewMonitorsListService creates a MonitorsListService.
-func NewMonitorsListService(dd *datadogapi.Client) *MonitorsListService {
-	return &MonitorsListService{dd: dd}
+func NewMonitorsListService(dd *datadogapi.Client, site string) *MonitorsListService {
+	return &MonitorsListService{dd: dd, site: site}
 }
 
 // Run fetches all monitors, paginating with page_size=100.
@@ -48,6 +50,9 @@ func (s *MonitorsListService) Run(ctx context.Context) (MonitorsListResult, erro
 		if err := s.dd.Get(ctx, path, &batch); err != nil {
 			return MonitorsListResult{}, err
 		}
+		for i := range batch {
+			batch[i].URL = fmt.Sprintf("https://app.%s/monitors/%d", s.site, batch[i].ID)
+		}
 		all = append(all, batch...)
 		if len(batch) < 100 {
 			break
@@ -59,12 +64,13 @@ func (s *MonitorsListService) Run(ctx context.Context) (MonitorsListResult, erro
 
 // MonitorsGetService fetches a single DataDog monitor by ID.
 type MonitorsGetService struct {
-	dd *datadogapi.Client
+	dd   *datadogapi.Client
+	site string
 }
 
 // NewMonitorsGetService creates a MonitorsGetService.
-func NewMonitorsGetService(dd *datadogapi.Client) *MonitorsGetService {
-	return &MonitorsGetService{dd: dd}
+func NewMonitorsGetService(dd *datadogapi.Client, site string) *MonitorsGetService {
+	return &MonitorsGetService{dd: dd, site: site}
 }
 
 // Run fetches a monitor by ID.
@@ -74,5 +80,6 @@ func (s *MonitorsGetService) Run(ctx context.Context, id int64) (MonitorsGetResu
 	if err := s.dd.Get(ctx, path, &m); err != nil {
 		return MonitorsGetResult{}, err
 	}
+	m.URL = fmt.Sprintf("https://app.%s/monitors/%d", s.site, m.ID)
 	return MonitorsGetResult{Monitor: m}, nil
 }
