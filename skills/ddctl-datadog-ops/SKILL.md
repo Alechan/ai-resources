@@ -87,11 +87,39 @@ If `datadog reachable: false` or you get HTTP 401, the cookies are expired — g
 ```
 ddctl logs-query --query "service:<name> status:error" --from now-1h
 ddctl logs-query --query "*" --from now-4h --limit 50 --json
+
+# Single-page result shows cursor hint if more pages exist:
+# next_cursor: Aw...
+# Use it:
+ddctl logs-query --cursor '<next_cursor value>'
+
+# Auto-paginate (collects up to --limit total events across pages):
+ddctl logs-query --all --limit 200
 ```
 
-Supported `--from`/`--to` formats: `now`, `now-1h`, `now-30m`, `now-2d`, Unix milliseconds, RFC3339.
+Supported `--from`/`--to` formats: `now`, `now-1h`, `now-30m`, `now-2d`, `now-1w`, Unix milliseconds, RFC3339.
 
-### Step 5 — Iterate and summarize
+### Step 5 — List monitors
+
+```
+ddctl monitors-list
+ddctl monitors-list --tag env:prod
+ddctl monitors-get <monitor-id>
+```
+
+Output format (text): `[id] state    type     name    tags:…`
+
+### Step 6 — List events
+
+```
+ddctl events-list --from now-2h
+ddctl events-list --from now-4h --tags env:prod
+```
+
+> **Note**: `events-list` uses `/api/v1/events`. If this returns HTTP 401, the DataDog
+> instance may require a different endpoint for events. Report the error and we will investigate.
+
+### Step 7 — Iterate and summarize
 
 Refine the query based on results; summarize findings with timestamps, services, and log lines.
 
@@ -99,6 +127,8 @@ Refine the query based on results; summarize findings with timestamps, services,
 
 - `ddctl doctor` shows `credentials found: true` and `datadog reachable: true`.
 - `ddctl logs-query --query "*" --limit 1` returns at least one log event or empty result without error.
+- `ddctl monitors-list` returns a list of monitors (even if empty).
+- `ddctl events-list --from now-2h` returns events or empty; HTTP 401 = endpoint needs investigation.
 
 ## Known obstacles and workarounds
 

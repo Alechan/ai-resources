@@ -3,20 +3,19 @@ package service
 import (
 	"context"
 	"fmt"
-	"strconv"
-	"strings"
-	"time"
 
 	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/datadogapi"
 	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/fail"
+	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/timeutil"
 )
 
 // LogsQueryInput holds the parameters for a logs search request.
 type LogsQueryInput struct {
-	Query string
-	From  string
-	To    string
-	Limit int
+	Query  string
+	From   string
+	To     string
+	Limit  int
+	Cursor string // pagination cursor from a previous result's NextCursor field
 }
 
 // LogEvent represents a single log event from DataDog.
@@ -36,7 +35,8 @@ type LogEventAttributes struct {
 
 // LogsQueryResult is the response from the DataDog logs search API.
 type LogsQueryResult struct {
-	Data []LogEvent `json:"data"`
+	Data       []LogEvent `json:"data"`
+	NextCursor string     `json:"next_cursor,omitempty"`
 }
 
 // v1 internal response types — the browser UI endpoint structure.
@@ -70,14 +70,14 @@ func NewLogsQueryService(dd *datadogapi.Client) *LogsQueryService {
 //
 // Column layout returned by the API: [0]=status, [1]=timestamp, [2]=host, [3]=service, [4]=message
 func (s *LogsQueryService) Run(ctx context.Context, input LogsQueryInput) (LogsQueryResult, error) {
-	fromMs, err := parseTimeToMs(input.From)
+	fromMs, err := timeutil.ParseToUnixMs(input.From)
 	if err != nil {
 		return LogsQueryResult{}, fail.NewValidation(
 			fmt.Sprintf("invalid --from value %q: %s", input.From, err),
 			`use relative (now-1h, now-30m, now-2d) or Unix milliseconds`,
 		)
 	}
-	toMs, err := parseTimeToMs(input.To)
+	toMs, err := timeutil.ParseToUnixMs(input.To)
 	if err != nil {
 		return LogsQueryResult{}, fail.NewValidation(
 			fmt.Sprintf("invalid --to value %q: %s", input.To, err),
@@ -93,17 +93,20 @@ func (s *LogsQueryService) Run(ctx context.Context, input LogsQueryInput) (LogsQ
 			{"field": map[string]any{"path": "service"}},
 			{"field": map[string]any{"path": "content"}},
 		},
-		"sorts":               []map[string]any{{"time": map[string]any{"order": "desc"}}},
-		"limit":               input.Limit,
-		"time":                map[string]any{"from": fromMs, "to": toMs},
-		"includeEvents":       true,
+		"sorts":                []map[string]any{{"time": map[string]any{"order": "desc"}}},
+		"limit":                input.Limit,
+		"time":                 map[string]any{"from": fromMs, "to": toMs},
+		"includeEvents":        true,
 		"includeEventContents": true,
-		"computeCount":        false,
-		"indexes":             []string{"*"},
-		"executionInfo":       map[string]any{},
+		"computeCount":         false,
+		"indexes":              []string{"*"},
+		"executionInfo":        map[string]any{},
 	}
 	if input.Query != "" && input.Query != "*" {
 		listBody["search"] = map[string]any{"query": input.Query}
+	}
+	if input.Cursor != "" {
+		listBody["after"] = input.Cursor
 	}
 
 	body := map[string]any{
@@ -139,51 +142,6 @@ func (s *LogsQueryService) Run(ctx context.Context, input LogsQueryInput) (LogsQ
 			Attributes: attrs,
 		})
 	}
+	result.NextCursor = raw.Result.Paging.After
 	return result, nil
-}
-
-// parseTimeToMs converts a time expression to Unix milliseconds.
-// Accepts: "now", "now-1h", "now-30m", "now-2d", Unix ms integers, or ISO-8601.
-func parseTimeToMs(s string) (int64, error) {
-	s = strings.TrimSpace(s)
-	if s == "now" {
-		return time.Now().UnixMilli(), nil
-	}
-	if strings.HasPrefix(s, "now-") {
-		suffix := s[4:]
-		var n int64
-		var unit string
-		for i, c := range suffix {
-			if c < '0' || c > '9' {
-				n, _ = strconv.ParseInt(suffix[:i], 10, 64)
-				unit = suffix[i:]
-				break
-			}
-		}
-		if n == 0 {
-			return 0, fmt.Errorf("invalid relative duration %q", s)
-		}
-		var d time.Duration
-		switch unit {
-		case "m":
-			d = time.Duration(n) * time.Minute
-		case "h":
-			d = time.Duration(n) * time.Hour
-		case "d":
-			d = time.Duration(n) * 24 * time.Hour
-		default:
-			return 0, fmt.Errorf("unknown unit %q (use m, h, d)", unit)
-		}
-		return time.Now().Add(-d).UnixMilli(), nil
-	}
-	// Try Unix milliseconds
-	if ms, err := strconv.ParseInt(s, 10, 64); err == nil {
-		return ms, nil
-	}
-	// Try ISO-8601
-	t, err := time.Parse(time.RFC3339, s)
-	if err != nil {
-		return 0, fmt.Errorf("cannot parse %q as relative, Unix ms, or RFC3339", s)
-	}
-	return t.UnixMilli(), nil
 }

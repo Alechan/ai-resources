@@ -7,7 +7,7 @@ It authenticates using DataDog session cookies stored in the macOS Keychain. All
 
 1. Install: `go install ./cmd/ddctl` (from `tools/ddctl/src`)
 2. Get cookies from Chrome DevTools (see [Workflow](#workflow) below)
-3. `ddctl init --curl '<paste cURL here>'`
+3. `ddctl init --cookie '<cookie string>' --csrf-token '<x-csrf-token value>'`
 4. `ddctl doctor`
 5. `ddctl logs-query --query "service:my-svc"`
 
@@ -39,12 +39,24 @@ ddctl --help
 
 ## Workflow
 
-1. Open Chrome and log in to `https://app.datadoghq.com`
+1. Open Chrome and log in to `https://app.datadoghq.com/logs` (the **Logs Explorer**)
 2. Open DevTools (Cmd+Option+I) → Network tab
-3. Filter by "Fetch/XHR", then reload the page or click any DataDog UI element
-4. Right-click any request to `app.datadoghq.com` → Copy → **Copy as cURL**
-5. Run: `ddctl init --curl '<pasted cURL command>'`
-6. Verify: `ddctl doctor`
+3. Filter requests by `logs-analytics` — find a **POST** request to `/api/v1/logs-analytics/list`
+4. Right-click it → Copy → **Copy as cURL**
+5. Extract from the cURL:
+   - The cookie string: value after `-b '...'` or `Cookie:` header
+   - The CSRF token: value of `-H 'x-csrf-token: ...'`
+6. Run:
+   ```bash
+   ddctl init --cookie '<cookie string>' --csrf-token '<x-csrf-token value>'
+   ```
+   Or pass the full cURL (auto-extracts both):
+   ```bash
+   ddctl init --curl '<full cURL command>'
+   ```
+7. Verify: `ddctl doctor`
+
+> **Important**: copy from the Logs Explorer page, not settings pages. Only Logs Explorer requests carry `dd_csrf_token` which is required for `logs-query`.
 
 ## Design decisions
 
@@ -90,9 +102,12 @@ ddctl init --curl '<new cURL from Chrome DevTools>'
 Usage: ddctl [global flags] <command> [flags]
 
 Commands:
-  init         Store DataDog session cookies from a cURL command or raw cookie string
-  doctor       Check credentials, DataDog auth, and reachability
-  logs-query   Query DataDog logs
+  init            Store DataDog session cookies from a cURL command or raw cookie string
+  doctor          Check credentials, DataDog auth, and reachability
+  logs-query      Query DataDog logs
+  monitors-list   List DataDog monitors
+  monitors-get    Get a specific DataDog monitor by ID
+  events-list     List DataDog events
 
 Global flags:
   --site <domain>        DataDog site domain (default: datadoghq.com)
@@ -107,11 +122,11 @@ Global flags:
 Store DataDog session cookies in the macOS Keychain.
 
 ```bash
-# From a cURL command (recommended)
-ddctl init --curl 'curl "https://app.datadoghq.com/api/v1/validate" -H "Cookie: DD_S=abc; ..."'
+# From a cURL command (auto-extracts cookies + CSRF token)
+ddctl init --curl 'curl "https://app.datadoghq.com/..." -b "dogweb=...; _dd_s_v2=..." -H "x-csrf-token: abc"'
 
-# From a raw cookie string
-ddctl init --cookie 'DD_S=abc123; dd_csrf_token=xyz'
+# From individual values (preferred — avoids shell escaping issues)
+ddctl init --cookie 'dogweb=...; _dd_s_v2=...' --csrf-token 'abc123'
 
 # Clear stored credentials
 ddctl init --clear
@@ -133,12 +148,52 @@ Query DataDog logs with a search filter and time range.
 ```bash
 ddctl logs-query --query "service:my-service status:error" --from now-1h --to now
 ddctl logs-query -q "env:prod" --from now-4h --limit 100 --json
+
+# Manual pagination: next_cursor is printed at the end of single-page results
+ddctl logs-query --cursor '<next_cursor value>'
+
+# Auto-paginate up to --limit total events
+ddctl logs-query --all --limit 200
 ```
+
+Accepted time formats: `now`, `now-1h`, `now-30m`, `now-2d`, `now-1w`, Unix milliseconds, RFC3339.
+
+### monitors-list
+
+List all DataDog monitors.
+
+```bash
+ddctl monitors-list
+ddctl monitors-list --tag env:prod
+ddctl monitors-list --json
+```
+
+### monitors-get
+
+Fetch a specific monitor by ID.
+
+```bash
+ddctl monitors-get 12345678
+ddctl monitors-get 12345678 --json
+```
+
+### events-list
+
+List DataDog events in a time range.
+
+```bash
+ddctl events-list --from now-2h
+ddctl events-list --from now-4h --tags env:prod --json
+```
+
+> **Note**: `events-list` uses `/api/v1/events` which may return HTTP 401 depending on your DataDog configuration. If this happens, report it — the browser may use a different internal endpoint.
 
 ## Troubleshooting
 
-- **Credentials not found**: run `ddctl init --curl '<cURL from Chrome DevTools>'`.
-- **Auth failures (HTTP 401/403)**: your session has expired; re-run `ddctl init` with a fresh cURL.
+- **Credentials not found**: run `ddctl init --cookie '<cookie str>' --csrf-token '<csrf token>'`.
+- **Auth failures (HTTP 401/403)**: your session has expired; re-run `ddctl init` with a fresh cURL from the Logs Explorer.
+- **logs-query returns 401 but doctor passes**: missing CSRF token. Re-run `ddctl init` with `--csrf-token`.
+- **events-list returns 401**: the `/api/v1/events` endpoint may not accept session-cookie auth on your DataDog instance; report the issue.
 - **Keychain access denied**: macOS may prompt for keychain access; accept the prompt.
 - **`command not found`**: ensure `$GOPATH/bin` (or `$HOME/go/bin`) is on `PATH`.
 - **Network errors**: verify connectivity to `app.datadoghq.com`; retry with `--timeout 60s`.

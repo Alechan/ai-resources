@@ -4,7 +4,12 @@
 
 ### Added
 
-- `ddctl` tool: unofficial DataDog CLI using Chrome cookies for auth (doctor, logs-query commands)
+- `ddctl` tool: unofficial DataDog CLI using Chrome cookies for auth (doctor, logs-query, monitors-list, monitors-get, events-list commands)
+- `ddctl logs-query`: pagination via `--cursor` and `--all` flags; `next_cursor` printed in text output
+- `ddctl monitors-list`: list all monitors with optional `--tag` filter
+- `ddctl monitors-get`: fetch a single monitor by ID
+- `ddctl events-list`: list events in a time range with optional source/tag filters
+- `internal/timeutil` package: shared relative-time parser (`now`, `now-1h`, `now-30m`, `now-2d`, `now-1w`, Unix ms, RFC3339)
 - `ddctl-datadog-ops` skill: procedure for querying DataDog logs with ddctl
 - Initial repository bootstrap for AI resource management.
 - Imported `gdrivectl` source into `tools/gdrivectl/src` as first-party code in this repository.

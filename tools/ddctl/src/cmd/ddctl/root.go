@@ -36,11 +36,17 @@ func Execute(args []string, stdout, stderr io.Writer) int {
 		return runDoctorCmd(ctx, svcs, cfg, cmdArgs, stdout, stderr)
 	case "logs-query":
 		return runLogsQueryCmd(ctx, svcs, cfg, cmdArgs, stdout, stderr)
+	case "monitors-list":
+		return runMonitorsListCmd(ctx, svcs, cfg, cmdArgs, stdout, stderr)
+	case "monitors-get":
+		return runMonitorsGetCmd(ctx, svcs, cfg, cmdArgs, stdout, stderr)
+	case "events-list":
+		return runEventsListCmd(ctx, svcs, cfg, cmdArgs, stdout, stderr)
 	case "help", "--help", "-h":
 		printUsage(stdout)
 		return fail.CodeOK
 	default:
-		err := fail.NewValidation("unknown command", "use one of: init, doctor, logs-query")
+		err := fail.NewValidation("unknown command", "use one of: init, doctor, logs-query, monitors-list, monitors-get, events-list")
 		writeError(stderr, err)
 		return fail.ExitCode(err)
 	}
@@ -110,9 +116,12 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: ddctl [global flags] <command> [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Commands:")
-	fmt.Fprintln(w, "  init         Store DataDog session cookies from a cURL command or raw cookie string")
-	fmt.Fprintln(w, "  doctor       Check credentials, DataDog auth, and reachability")
-	fmt.Fprintln(w, "  logs-query   Query DataDog logs")
+	fmt.Fprintln(w, "  init            Store DataDog session cookies from a cURL command or raw cookie string")
+	fmt.Fprintln(w, "  doctor          Check credentials, DataDog auth, and reachability")
+	fmt.Fprintln(w, "  logs-query      Query DataDog logs")
+	fmt.Fprintln(w, "  monitors-list   List DataDog monitors")
+	fmt.Fprintln(w, "  monitors-get    Get a specific DataDog monitor by ID")
+	fmt.Fprintln(w, "  events-list     List DataDog events")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Global flags:")
 	fmt.Fprintln(w, "  --site <domain>        DataDog site domain (default: datadoghq.com)")
