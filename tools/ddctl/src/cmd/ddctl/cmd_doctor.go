@@ -33,8 +33,8 @@ func runDoctorCmd(ctx context.Context, svcs app.Services, cfg app.Config, args [
 		return fail.CodeOK
 	}
 
-	fmt.Fprintf(stdout, "cookies path: %s\n", report.CookiesPath)
-	fmt.Fprintf(stdout, "cookies file found: %t\n", report.CookiesFileFound)
+	fmt.Fprintf(stdout, "credential store: %s\n", report.CredentialStore)
+	fmt.Fprintf(stdout, "credentials found: %t\n", report.CredentialsFound)
 	fmt.Fprintf(stdout, "session cookies: %d\n", report.SessionCookies)
 	fmt.Fprintf(stdout, "datadog reachable: %t\n", report.DataDogReachable)
 	if report.Note != "" {

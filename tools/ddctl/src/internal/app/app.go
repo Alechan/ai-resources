@@ -10,6 +10,7 @@ import (
 )
 
 type Services struct {
+	Auth      *auth.KeychainProvider
 	Doctor    *service.DoctorService
 	LogsQuery *service.LogsQueryService
 	Output    *output.Writer
@@ -17,11 +18,12 @@ type Services struct {
 
 func NewServices(cfg Config) Services {
 	httpClient := &http.Client{Timeout: cfg.Timeout}
-	cookieProvider := auth.NewChromeCookieProvider(cfg.CookiesPath)
-	ddClient := datadogapi.NewClient(httpClient, cfg.Site, cookieProvider)
+	authProvider := auth.NewKeychainProvider(cfg.Site)
+	ddClient := datadogapi.NewClient(httpClient, cfg.Site, authProvider)
 
 	return Services{
-		Doctor:    service.NewDoctorService(cookieProvider, ddClient),
+		Auth:      authProvider,
+		Doctor:    service.NewDoctorService(authProvider, ddClient),
 		LogsQuery: service.NewLogsQueryService(ddClient),
 		Output:    output.NewWriter(),
 	}

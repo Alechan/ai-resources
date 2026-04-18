@@ -7,12 +7,13 @@ Provide a repeatable procedure for querying DataDog logs and checking DataDog he
 ## When To Use
 
 - Querying logs with a search filter (service, status, environment, custom attributes).
-- Checking DataDog reachability and verifying Chrome cookie authentication.
+- Checking DataDog reachability and verifying session cookie authentication.
 - Iterative log investigation: narrowing down a time window or refining a query based on results.
 - Confirming DataDog connectivity before beginning a deeper investigation.
 
 ## Inputs
 
+- **cURL command from Chrome DevTools** (for init), or confirmation that `ddctl init` was already run.
 - **Query string**: DataDog log search syntax (e.g. `service:my-service status:error env:prod`).
 - **Time range**: relative (e.g. `now-1h`, `now-4h`) or ISO-8601 timestamps.
 - **Output format**: text (default) or `--json` for structured output.
@@ -20,19 +21,24 @@ Provide a repeatable procedure for querying DataDog logs and checking DataDog he
 
 ## Workflow
 
-1. Run `ddctl doctor` to verify Chrome cookies are present and DataDog is reachable.
-   - If `cookies file found: false`, ensure Chrome has been used to visit `app.datadoghq.com`.
-   - If `session cookies: 0`, refresh the session by visiting DataDog in Chrome.
-   - If `datadog reachable: false`, check network connectivity.
-2. Run `ddctl logs-query --query "..." --from now-1h --to now` to fetch recent logs.
-3. Review results; narrow the query or time range as needed and iterate.
-4. Use `--json` for machine-readable output when post-processing results.
-5. Summarize findings: notable patterns, error counts, relevant log lines.
+1. **One-time setup — extract cookies from Chrome:**
+   a. Open Chrome and log in to https://app.datadoghq.com
+   b. Open DevTools (Cmd+Option+I) → Network tab
+   c. Filter by "Fetch/XHR", then reload the page or click any DataDog UI element
+   d. Right-click any request to app.datadoghq.com → Copy → **Copy as cURL**
+   e. Paste the cURL into the chat; the skill will run `ddctl init --curl '<pasted cURL>'`
+
+2. Verify setup: `ddctl doctor`
+
+3. Query logs: `ddctl logs-query --query "<filter>" --from now-1h`
+
+4. Narrow and iterate based on results.
+
+5. Summarize findings with timestamps, services, and relevant log lines.
 
 ## Validation
 
-- `ddctl --help` executes without error.
-- `ddctl doctor` reports `cookies file found: true` and `datadog reachable: true`.
+- `ddctl doctor` shows `credentials found: true` and `datadog reachable: true`.
 - `ddctl logs-query --query "*" --limit 1` returns at least one log event or an empty result without error.
 
 ## Safety

@@ -24,12 +24,14 @@ func Execute(args []string, stdout, stderr io.Writer) int {
 		return fail.CodeValidation
 	}
 
-	cfg := app.NewConfig(opts.cookiesPath, opts.site, opts.timeout, opts.json, opts.debug)
+	cfg := app.NewConfig(opts.site, opts.timeout, opts.json, opts.debug)
 	svcs := app.NewServices(cfg)
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.Timeout)
 	defer cancel()
 
 	switch cmd {
+	case "init":
+		return runInitCmd(ctx, svcs, cfg, cmdArgs, stdout, stderr)
 	case "doctor":
 		return runDoctorCmd(ctx, svcs, cfg, cmdArgs, stdout, stderr)
 	case "logs-query":
@@ -38,33 +40,27 @@ func Execute(args []string, stdout, stderr io.Writer) int {
 		printUsage(stdout)
 		return fail.CodeOK
 	default:
-		err := fail.NewValidation("unknown command", "use one of: doctor, logs-query")
+		err := fail.NewValidation("unknown command", "use one of: init, doctor, logs-query")
 		writeError(stderr, err)
 		return fail.ExitCode(err)
 	}
 }
 
 type rootOptions struct {
-	cookiesPath string
-	site        string
-	timeout     time.Duration
-	json        bool
-	debug       bool
+	site    string
+	timeout time.Duration
+	json    bool
+	debug   bool
 }
 
 func parseRootArgs(args []string) (rootOptions, string, []string, error) {
-	cookiesPath := strings.TrimSpace(os.Getenv("DDCTL_COOKIES_PATH"))
-	if cookiesPath == "" {
-		cookiesPath = "~/Library/Application Support/Google/Chrome/Default/Cookies"
-	}
 	site := strings.TrimSpace(os.Getenv("DDCTL_SITE"))
 	if site == "" {
 		site = "datadoghq.com"
 	}
 	opts := rootOptions{
-		cookiesPath: cookiesPath,
-		site:        site,
-		timeout:     30 * time.Second,
+		site:    site,
+		timeout: 30 * time.Second,
 	}
 	rest := make([]string, 0, len(args))
 	for i := 0; i < len(args); i++ {
@@ -76,14 +72,6 @@ func parseRootArgs(args []string) (rootOptions, string, []string, error) {
 			opts.json = true
 		case a == "--debug":
 			opts.debug = true
-		case a == "--cookies-path":
-			if i+1 >= len(args) {
-				return opts, "", nil, fail.NewValidation("missing value for --cookies-path", "provide a valid path to the Chrome Cookies file")
-			}
-			i++
-			opts.cookiesPath = args[i]
-		case strings.HasPrefix(a, "--cookies-path="):
-			opts.cookiesPath = strings.TrimPrefix(a, "--cookies-path=")
 		case a == "--site":
 			if i+1 >= len(args) {
 				return opts, "", nil, fail.NewValidation("missing value for --site", "provide a DataDog site domain like datadoghq.com")
@@ -122,13 +110,11 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: ddctl [global flags] <command> [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Commands:")
-	fmt.Fprintln(w, "  doctor       Check Chrome cookies, DataDog auth, and reachability")
+	fmt.Fprintln(w, "  init         Store DataDog session cookies from a cURL command or raw cookie string")
+	fmt.Fprintln(w, "  doctor       Check credentials, DataDog auth, and reachability")
 	fmt.Fprintln(w, "  logs-query   Query DataDog logs")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Global flags:")
-	fmt.Fprintln(w, "  --cookies-path <path>  Path to Chrome Cookies SQLite file")
-	fmt.Fprintln(w, "                           Env override: DDCTL_COOKIES_PATH")
-	fmt.Fprintln(w, "                           Default: ~/Library/Application Support/Google/Chrome/Default/Cookies")
 	fmt.Fprintln(w, "  --site <domain>        DataDog site domain (default: datadoghq.com)")
 	fmt.Fprintln(w, "                           Env override: DDCTL_SITE")
 	fmt.Fprintln(w, "  --timeout <duration>   Timeout per command (default: 30s)")
