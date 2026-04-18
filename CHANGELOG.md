@@ -4,7 +4,7 @@
 
 ### Added
 
-- `ddctl` tool: unofficial DataDog CLI using Chrome cookies for auth (doctor, logs-query, monitors-list, monitors-get, events-list commands)
+- `ddctl` tool: unofficial DataDog CLI — added `metrics-query` (Phase 5)
 - `ddctl logs-query`: pagination via `--cursor` and `--all` flags; `next_cursor` printed in text output
 - `ddctl monitors-list`: list all monitors with optional `--tag` filter
 - `ddctl monitors-get`: fetch a single monitor by ID

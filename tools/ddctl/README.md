@@ -188,7 +188,23 @@ ddctl events-list --from now-4h --tags env:prod --json
 
 > **Note**: `events-list` uses `/api/v1/events` which may return HTTP 401 depending on your DataDog configuration. If this happens, report it — the browser may use a different internal endpoint.
 
-## Troubleshooting
+### metrics-query
+
+Query DataDog timeseries metrics. Returns summary stats (min/avg/max/last) per series.
+
+```bash
+# Summary stats (default)
+ddctl metrics-query --query "avg:system.cpu.user{service:my-svc}" --from now-1h
+
+# Multiple series with grouping
+ddctl metrics-query --query "sum:aws.sqs.number_of_messages_received{service:tapir} by {queuename}.as_rate()" --from now-1h
+
+# JSON output (stats only, no pointlist)
+ddctl metrics-query --query "avg:system.cpu.user{*}" --from now-4h --json
+
+# JSON with full pointlist
+ddctl metrics-query --query "avg:system.cpu.user{*}" --from now-1h --json --raw
+```
 
 - **Credentials not found**: run `ddctl init --cookie '<cookie str>' --csrf-token '<csrf token>'`.
 - **Auth failures (HTTP 401/403)**: your session has expired; re-run `ddctl init` with a fresh cURL from the Logs Explorer.

@@ -10,13 +10,14 @@ import (
 )
 
 type Services struct {
-	Auth         *auth.KeychainProvider
-	Doctor       *service.DoctorService
-	LogsQuery    *service.LogsQueryService
-	MonitorsList *service.MonitorsListService
-	MonitorsGet  *service.MonitorsGetService
-	EventsList   *service.EventsListService
-	Output       *output.Writer
+	Auth          *auth.KeychainProvider
+	Doctor        *service.DoctorService
+	LogsQuery     *service.LogsQueryService
+	MonitorsList  *service.MonitorsListService
+	MonitorsGet   *service.MonitorsGetService
+	EventsList    *service.EventsListService
+	MetricsQuery  *service.MetricsQueryService
+	Output        *output.Writer
 }
 
 func NewServices(cfg Config) Services {
@@ -31,6 +32,7 @@ func NewServices(cfg Config) Services {
 		MonitorsList: service.NewMonitorsListService(ddClient),
 		MonitorsGet:  service.NewMonitorsGetService(ddClient),
 		EventsList:   service.NewEventsListService(ddClient),
+		MetricsQuery: service.NewMetricsQueryService(ddClient),
 		Output:       output.NewWriter(),
 	}
 }

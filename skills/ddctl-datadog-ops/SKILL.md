@@ -119,7 +119,23 @@ ddctl events-list --from now-4h --tags env:prod
 > **Note**: `events-list` uses `/api/v1/events`. If this returns HTTP 401, the DataDog
 > instance may require a different endpoint for events. Report the error and we will investigate.
 
-### Step 7 — Iterate and summarize
+### Step 7 — Query metrics
+
+```
+ddctl metrics-query --query "avg:system.cpu.user{service:<name>}" --from now-1h
+ddctl metrics-query --query "sum:aws.sqs.number_of_messages_received{service:<name>} by {queuename}.as_rate()" --from now-1h
+ddctl metrics-query --query "<query>" --from now-4h --json
+ddctl metrics-query --query "<query>" --from now-4h --json --raw   # includes full pointlist
+```
+
+The query syntax is standard DataDog metrics query syntax:
+- `avg:`, `sum:`, `max:`, `min:`, `count:` aggregators
+- `{<tag>:<value>}` filter, `by {<tag>}` grouping
+- `.as_count()`, `.as_rate()`, `.fill(last)` rollup functions
+
+Text output shows per-series summary stats: `min`, `avg`, `max`, `last`, point count, interval.
+
+### Step 8 — Iterate and summarize
 
 Refine the query based on results; summarize findings with timestamps, services, and log lines.
 
@@ -129,6 +145,7 @@ Refine the query based on results; summarize findings with timestamps, services,
 - `ddctl logs-query --query "*" --limit 1` returns at least one log event or empty result without error.
 - `ddctl monitors-list` returns a list of monitors (even if empty).
 - `ddctl events-list --from now-2h` returns events or empty; HTTP 401 = endpoint needs investigation.
+- `ddctl metrics-query --query "avg:system.cpu.user{*}" --from now-1h` returns series or "no data".
 
 ## Known obstacles and workarounds
 
