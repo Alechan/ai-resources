@@ -46,6 +46,27 @@ ddctl --help
 5. Run: `ddctl init --curl '<pasted cURL command>'`
 6. Verify: `ddctl doctor`
 
+## Design decisions
+
+### Why the CLI parses the cURL, not the AI
+
+When used through an AI skill, the user pastes a cURL command into the chat and the skill calls `ddctl init --curl '...'`. The Cookie header extraction happens inside the CLI, not in the LLM.
+
+This is intentional:
+
+- **Deterministic by nature.** Extracting a `Cookie:` header from a cURL string is a mechanical regex match — no ambiguity, no judgment required. That's the wrong job for an LLM.
+- **Consistent and tested.** The parser has unit tests and behaves identically regardless of which model or prompt runs the skill.
+- **Safe at the boundary.** Cookie values contain `=`, `;`, and quotes. An LLM parsing and re-serialising them risks silent corruption that only surfaces as a confusing 401 later.
+- **Self-contained CLI.** The tool works without an AI in the loop. A human can run `ddctl init --curl '...'` directly.
+
+The AI skill's job is to know *when* and *why* to call `ddctl init` — guiding the user through DevTools and deciding which command to run. String processing belongs in code.
+
+### Why macOS Keychain, not a config file
+
+An earlier design read cookies directly from Chrome's SQLite database. That required deriving Chrome's master AES key from macOS Keychain, which could decrypt *any* Chrome cookie (Google, banks, everything) — a much broader blast radius than needed.
+
+The current approach stores only the DataDog session string, scoped under service `"ddctl"`. A config file (`~/.config/ddctl/session.json`) would work too, but Keychain gives OS-level access control and keeps credentials out of the filesystem where they might be swept up by backups, dotfile sync, or accidental `cat`.
+
 ## Credential Storage
 
 Cookies are stored in the macOS Keychain under:
