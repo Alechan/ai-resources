@@ -4,6 +4,8 @@
 
 ### Added
 
+- `ddctl` tool: unofficial DataDog CLI using Chrome cookies for auth (doctor, logs-query commands)
+- `ddctl-datadog-ops` skill: procedure for querying DataDog logs with ddctl
 - Initial repository bootstrap for AI resource management.
 - Imported `gdrivectl` source into `tools/gdrivectl/src` as first-party code in this repository.
 - CI workflow at `.github/workflows/ci.yml` with Go `1.24.2`, repository verification, and `gdrivectl` test execution.

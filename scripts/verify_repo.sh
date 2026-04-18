@@ -54,6 +54,11 @@ required_dirs=(
   "tools/gdrivectl/src/cmd"
   "tools/gdrivectl/src/cmd/gdrivectl"
   "tools/gdrivectl/src/internal"
+  "tools/ddctl"
+  "tools/ddctl/src"
+  "tools/ddctl/src/cmd"
+  "tools/ddctl/src/cmd/ddctl"
+  "tools/ddctl/src/internal"
   "playbooks"
   "scripts"
 )
@@ -74,6 +79,9 @@ required_files=(
   "tools/gdrivectl/README.md"
   "tools/gdrivectl/src/go.mod"
   "tools/gdrivectl/src/cmd/gdrivectl/main.go"
+  "tools/ddctl/README.md"
+  "tools/ddctl/src/go.mod"
+  "tools/ddctl/src/cmd/ddctl/main.go"
   "playbooks/datagrip-datasource-update.md"
   "scripts/install_codex_skill.sh"
   "scripts/install_claude_agent.sh"
@@ -120,6 +128,7 @@ check_executable "scripts/mock_datagrip_eval_runner.py"
 check_executable "tools/claude-statusline/src/statusline-command.sh"
 
 require_catalog_entry "claude-statusline" "tool"
+require_catalog_entry "ddctl" "tool"
 
 if ! "$repo_root/scripts/lint_shell.sh"; then
   errors=1
