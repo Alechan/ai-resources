@@ -41,10 +41,22 @@ func (c *Client) Get(ctx context.Context, path string, out any) error {
 }
 
 // Post performs an authenticated POST request with a JSON body and decodes the JSON response into out.
+// If a CSRF token cookie is present, it is automatically injected as _authentication_token in the
+// request body (required by DataDog's browser UI endpoints).
 func (c *Client) Post(ctx context.Context, path string, body, out any) error {
 	b, err := json.Marshal(body)
 	if err != nil {
 		return fail.NewAPI("failed to marshal request body", "", err.Error())
+	}
+	// Inject _authentication_token from CSRF cookie if available.
+	if csrf := c.csrfToken(); csrf != "" {
+		var m map[string]any
+		if json.Unmarshal(b, &m) == nil {
+			m["_authentication_token"] = csrf
+			if rb, err := json.Marshal(m); err == nil {
+				b = rb
+			}
+		}
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL()+path, bytes.NewReader(b))
 	if err != nil {
@@ -55,6 +67,20 @@ func (c *Client) Post(ctx context.Context, path string, body, out any) error {
 		return err
 	}
 	return c.do(req, out)
+}
+
+// csrfToken returns the CSRF token value from stored cookies, or empty string if not found.
+func (c *Client) csrfToken() string {
+	cookies, err := c.cookies.Cookies()
+	if err != nil {
+		return ""
+	}
+	for _, cookie := range cookies {
+		if cookie.Name == "dd_csrf_token" || cookie.Name == "_csrf" {
+			return cookie.Value
+		}
+	}
+	return ""
 }
 
 // Probe sends a GET to the given path and returns true if any HTTP response is received
@@ -82,7 +108,7 @@ func (c *Client) addAuth(req *http.Request) error {
 	}
 	for _, cookie := range cookies {
 		if cookie.Name == "dd_csrf_token" || cookie.Name == "_csrf" {
-			req.Header.Set("X-DD-Proxy-Csrf-Token", cookie.Value)
+			req.Header.Set("x-csrf-token", cookie.Value)
 			break
 		}
 	}

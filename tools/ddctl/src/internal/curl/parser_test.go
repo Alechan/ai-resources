@@ -49,6 +49,20 @@ func TestExtractCookieHeader_DoubleQuoted(t *testing.T) {
 	}
 }
 
+func TestExtractCookieHeader_DashB(t *testing.T) {
+	curlCmd := `curl 'https://app.datadoghq.com/api/v1/validate' \
+  -H 'accept: */*' \
+  -b 'dogweb=abc123; _dd_s=rum=1&expire=9999; dd_csrf_token=xyz'`
+
+	got, err := curl.ExtractCookieHeader(curlCmd)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(got, "dogweb=abc123") {
+		t.Errorf("got %q, expected to contain dogweb=abc123", got)
+	}
+}
+
 func TestExtractCookieHeader_LongHeader(t *testing.T) {
 	curlCmd := `curl 'https://app.datadoghq.com/api/v1/validate' \
   --header 'Cookie: DD_S=abc; dd_csrf=xyz; _dd_s=rum=1&expire=1234567890'`
