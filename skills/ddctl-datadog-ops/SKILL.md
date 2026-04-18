@@ -43,11 +43,21 @@ in requests made from settings pages or on initial page load.
 
 **cURL format note:**
 Chrome may produce either `-H 'Cookie: ...'` or `-b '...'` form — `ddctl init` handles both.
-However, **shell-escaping a complex multi-line cURL** is error-prone. Prefer:
+The `x-csrf-token` header is extracted automatically from the cURL when using `--curl`.
+
+However, **shell-escaping a complex multi-line cURL** is error-prone. The reliable path:
+extract the cookie string and CSRF token from the cURL yourself and pass them as:
 ```
-ddctl init --cookie '<paste just the cookie string here>'
+ddctl init --cookie '<cookie_string>' --csrf-token '<x-csrf-token value>'
 ```
-To extract the cookie string: find the `-b '...'` or `Cookie:` value in the cURL and paste only that value.
+To get the cookie string: find the `-b '...'` or `Cookie:` value in the cURL.
+To get the CSRF token: find the `-H 'x-csrf-token: ...'` line in the cURL.
+
+**Why is the CSRF token needed?**
+DataDog's browser UI endpoint (`/api/v1/logs-analytics/list`) validates a CSRF token sent
+both as the `x-csrf-token` request header and as `_authentication_token` in the POST body.
+This token is NOT a cookie — it lives in a `x-csrf-token` header in the request.
+`ddctl init` stores it as a synthetic `dd_csrf_token` cookie so the API client can inject it.
 
 ### Step 2 — Initialize credentials
 
@@ -95,9 +105,11 @@ Refine the query based on results; summarize findings with timestamps, services,
 ### HTTP 401 from logs-query even after a successful doctor
 
 `ddctl doctor` only checks GET reachability. The logs query uses a POST endpoint that requires
-`dd_csrf_token` cookie. If that cookie is absent, the POST returns 401.
+the `x-csrf-token` header and `_authentication_token` body field. These come from the CSRF token
+stored during `ddctl init`.
 
-**Fix:** Re-run `ddctl init` with a cURL copied from the Logs Explorer page (not any other page).
+**Fix:** Re-run `ddctl init` using a cURL from the Logs Explorer page, which always has `x-csrf-token`.
+Make sure to pass `--csrf-token` (or use `--curl` which extracts it automatically).
 
 ### Chrome HAR exports strip cookies (do not use HAR files for init)
 

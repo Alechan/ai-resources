@@ -18,6 +18,7 @@ func runInitCmd(_ context.Context, svcs app.Services, cfg app.Config, args []str
 
 	curlVal := fs.String("curl", "", "cURL command copied from Chrome DevTools")
 	cookieVal := fs.String("cookie", "", "raw Cookie header value")
+	csrfVal := fs.String("csrf-token", "", "x-csrf-token value (extracted from cURL automatically if --curl is used)")
 	clear := fs.Bool("clear", false, "delete stored credentials and exit")
 
 	if err := fs.Parse(args); err != nil {
@@ -51,6 +52,15 @@ func runInitCmd(_ context.Context, svcs app.Services, cfg app.Config, args []str
 			writeError(stderr, fail.NewValidation(err.Error(), "ensure the cURL command includes a Cookie header"))
 			return fail.CodeValidation
 		}
+		// Auto-extract CSRF token from x-csrf-token header if not explicitly provided.
+		if *csrfVal == "" {
+			*csrfVal = curl.ExtractCSRFToken(*curlVal)
+		}
+	}
+
+	// Append CSRF token as synthetic dd_csrf_token cookie so the API client can inject it.
+	if *csrfVal != "" {
+		cookieStr = cookieStr + "; dd_csrf_token=" + *csrfVal
 	}
 
 	if err := svcs.Auth.Store(cookieStr); err != nil {
