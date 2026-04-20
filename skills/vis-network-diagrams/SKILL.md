@@ -140,6 +140,70 @@ network.once('afterDrawing', updateZoomLabel);
 
 ---
 
+## Multi-tab architecture (for multiple diagrams in one file)
+
+When building a file with multiple diagrams (e.g. one tab per service), use lazy initialization:
+
+```js
+// Store all diagram data as plain objects
+const ALL_DIAGRAMS = {
+  serviceA: { nodeData: {...}, edgeList: [...], defaultPositions: {...}, storageKey: 'a-v1', subtitle: '...' },
+  serviceB: { ... },
+};
+
+// Per-tab runtime state
+const instances = {}; // tabId → { network, nodes, edges, edgeInfo }
+let activeTab = 'serviceA';
+
+// Lazy init: called on first tab activation
+function initDiagram(id) {
+  if (instances[id]) return;
+  const D = ALL_DIAGRAMS[id];
+  const edgeInfo = {};
+
+  const nodes = new vis.DataSet(Object.entries(D.nodeData).map(([nid, d]) => ({
+    id: nid, label: d.label, ...nodeStyle(d.group),
+  })));
+
+  const edges = new vis.DataSet(D.edgeList.map(({ id, from, to, label, async: isAsync, desc }) => {
+    edgeInfo[id] = { desc, async: isAsync };
+    return buildEdge(id, from, to, label, isAsync);
+  }));
+
+  // dynamic height, inject positions, create network...
+  const container = document.getElementById(`pane-${id}`).querySelector('.network-container');
+  const network = new vis.Network(container, { nodes, edges }, { /* options */ });
+  instances[id] = { network, nodes, edges, edgeInfo };
+}
+
+function switchTab(id) {
+  activeTab = id;
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.toggle('active', p.id === `pane-${id}`));
+  initDiagram(id);
+  updateZoomLabel();
+}
+
+// Toolbar functions act on the active network
+function getActive() { return instances[activeTab]; }
+function cycleRouting() {
+  const inst = getActive(); if (!inst) return;
+  // ... update inst.network
+}
+```
+
+**Reset layout** for multi-tab: clear only the active tab's localStorage key, then delete the instance and re-init:
+
+```js
+function resetLayout() {
+  localStorage.removeItem(ALL_DIAGRAMS[activeTab].storageKey);
+  delete instances[activeTab];
+  document.getElementById(`pane-${activeTab}`).innerHTML = '<div class="network-container"></div>';
+  switchTab(activeTab);
+}
+```
+
+---
+
 ## Critical gotchas (learned the hard way)
 
 ### 1. vis.js clears everything inside its container on init
@@ -239,6 +303,10 @@ nodes.add({ id: 'wp', label: '⤡', shape: 'dot', title: 'Drag to reroute' });
 // ✅ clean — tooltip still works on hover
 nodes.add({ id: 'wp', label: '', shape: 'dot', title: 'Drag to reroute' });
 ```
+
+### 9. Cross-service queue naming (documentation trap)
+
+Queue names don't always reflect the consuming service. Legacy queues may use a different service's prefix even though they're owned/consumed by another service. Example: `tapir-email-notifications-production.fifo` is owned by Tapir but consumed by Albatross — it was renamed before ownership was transferred. Always document this explicitly in the node's `purpose` field.
 
 ---
 
