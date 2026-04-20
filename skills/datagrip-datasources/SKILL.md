@@ -1,3 +1,8 @@
+---
+name: datagrip-datasources
+description: Procedures for safely updating DataGrip datasource definitions with explicit, reversible, and validated changes. Use when asked to add, update, or remove DataGrip database connections.
+---
+
 # datagrip-datasources
 
 ## Purpose

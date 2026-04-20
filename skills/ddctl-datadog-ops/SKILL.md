@@ -1,3 +1,8 @@
+---
+name: ddctl-datadog-ops
+description: Procedures for querying DataDog logs, metrics, and monitors using the ddctl CLI tool. Use when asked to investigate DataDog alerts, check service health, query logs, or list monitors.
+---
+
 # ddctl-datadog-ops
 
 ## Purpose

@@ -1,3 +1,8 @@
+---
+name: gdrivectl-drive-ops
+description: Procedures for safe Google Drive file operations using the gdrivectl CLI tool. Use when asked to upload, download, list, or manage files in Google Drive.
+---
+
 # gdrivectl-drive-ops
 
 ## Purpose
