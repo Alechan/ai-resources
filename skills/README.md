@@ -42,6 +42,7 @@ Optional fields: `license`, `allowed-tools` (pre-approves shell tools — use wi
 | [`ddctl-datadog-ops`](./ddctl-datadog-ops/SKILL.md) | Query DataDog logs, metrics, and monitors via `ddctl` |
 | [`gdrivectl-drive-ops`](./gdrivectl-drive-ops/SKILL.md) | Google Drive file operations via `gdrivectl` |
 | [`datagrip-datasources`](./datagrip-datasources/SKILL.md) | Update DataGrip datasource definitions safely |
+| [`vis-network-diagrams`](./vis-network-diagrams/SKILL.md) | Build interactive HTML network/graph diagrams using vis.js |
 
 Skills specific to the Mytheresa ecosystem live in the `mytheresa_ecosystem` repo under `skills/`.
 
