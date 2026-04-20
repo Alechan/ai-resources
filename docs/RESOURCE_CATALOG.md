@@ -11,3 +11,4 @@
 | datagrip-datasource-update | playbook | draft | data-platform | `playbooks/datagrip-datasource-update.md` | `bash scripts/verify_repo.sh` | this repo |
 | ddctl-datadog-ops | skill | active | platform | `~/.codex/skills/ddctl-datadog-ops/SKILL.md` | `bash scripts/verify_repo.sh` | this repo |
 | ddctl | tool | active | platform | `go install github.com/Alechan/ai-resources/tools/ddctl/src/cmd/ddctl@latest` | `cd tools/ddctl/src && go test ./...` | this repo |
+| miro | tool | active | platform | `tools/miro/README.md` (no install — procedure doc) | `bash scripts/verify_repo.sh` | this repo |
