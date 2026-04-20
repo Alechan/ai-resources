@@ -226,6 +226,61 @@ python3 -m http.server 8080
 # then open http://localhost:8080/diagram.html
 ```
 
+### 8. `dot` shape label renders below the node — leave it empty for waypoints
+
+`dot` nodes render their label text **below** the circle, outside the fill. If you set `label: '⤡'` on a waypoint node it will appear as a floating arrow icon that moves with the node and looks like a stray cursor.
+
+**Fix:** set `label: ''` and use `title` for the hover tooltip instead.
+
+```js
+// ❌ label appears as a floating symbol below the dot
+nodes.add({ id: 'wp', label: '⤡', shape: 'dot', title: 'Drag to reroute' });
+
+// ✅ clean — tooltip still works on hover
+nodes.add({ id: 'wp', label: '', shape: 'dot', title: 'Drag to reroute' });
+```
+
+---
+
+## Waypoint nodes for back-edges
+
+When a back-edge (e.g. A → B where B is to the left of A) would visually slice through other nodes, route it via a small draggable waypoint node placed above or below the main flow.
+
+```js
+// 1. Add a tiny dot node — no label, just a tooltip
+nodes.add({
+  id: 'wp_a_to_b',
+  label: '',
+  title: 'Routing waypoint — drag to reroute the A → B edge',
+  shape: 'dot',
+  size: 7,
+  color: { background: '#d0d7de', border: '#8c959f',
+           highlight: { background: '#e8ebef', border: '#57606a' } },
+});
+
+// 2. Split the logical edge into two segments through the waypoint
+edges.add([
+  { id: 'e_a_wp',  from: 'a', to: 'wp_a_to_b', label: 'your label', ...edgeStyle },
+  { id: 'e_wp_b',  from: 'wp_a_to_b', to: 'b', label: 'your label', ...edgeStyle },
+]);
+
+// 3. Give it an initial position above/below the flow
+DEFAULT_POSITIONS['wp_a_to_b'] = { x: midX, y: -600 };
+```
+
+Repeat the same label and description on both segments so clicking either edge shows the same info.
+
+Handle waypoint clicks in your sidebar to avoid showing a broken node detail panel:
+```js
+network.on('click', ({ nodes: ns }) => {
+  if (ns[0] === 'wp_a_to_b') {
+    sidebar.innerHTML = '<p>Routing waypoint — drag to reroute.</p>';
+  } else {
+    showNode(ns[0]);
+  }
+});
+```
+
 ---
 
 ## Layout persistence pattern
@@ -241,6 +296,12 @@ const network = new vis.Network(...);  // network reads x/y from DataSet
 // ❌ wrong — network already placed nodes, update has no visual effect
 const network = new vis.Network(...);
 nodes.update({ id: 'x', x: 100, y: 100 });
+```
+
+**Important:** saved `localStorage` positions silently override `DEFAULT_POSITIONS`. If the user changes the defaults and wonders why nothing moved, they need to clear storage. Always provide a Reset button:
+
+```js
+function resetLayout() { localStorage.removeItem(STORAGE_KEY); location.reload(); }
 ```
 
 ---
@@ -285,3 +346,25 @@ Use a separate `nodeData` / `edgeInfo` object (keyed by id) to store rich metada
 ```
 
 Pin the version. The standalone UMD bundle includes everything — no need for separate `vis-data`.
+
+---
+
+## Debugging: routing toggle has no visual effect
+
+If a routing button calls `setOptions` but edges don't visibly change, run this in the browser console:
+
+```js
+// 1. Check if edges have a stored per-edge smooth value
+edges.get().slice(0, 3).forEach(e => console.log(e.id, e.smooth));
+// If you see smooth values here (e.g. {type:'straightCross'}), they're blocking setOptions.
+
+// 2. Confirm setOptions IS cycling (index changes, mode is correct)
+console.log(routingIndex, ROUTING_MODES[routingIndex]);
+cycleRouting();
+console.log(routingIndex, ROUTING_MODES[routingIndex]);
+
+// 3. Force-apply as a test — if THIS works, the fix is to remove smooth from edge definitions
+edges.update(edges.get().map(e => ({ id: e.id, smooth: ROUTING_MODES[routingIndex].smooth })));
+```
+
+If step 3 works but step 2 doesn't, per-edge `smooth` in the DataSet is the culprit — remove it from the edge builder function (see gotcha #2 above).
