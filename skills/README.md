@@ -43,6 +43,10 @@ Optional fields: `license`, `allowed-tools` (pre-approves shell tools — use wi
 | [`gdrivectl-drive-ops`](./gdrivectl-drive-ops/SKILL.md) | Google Drive file operations via `gdrivectl` |
 | [`datagrip-datasources`](./datagrip-datasources/SKILL.md) | Update DataGrip datasource definitions safely |
 | [`vis-network-diagrams`](./vis-network-diagrams/SKILL.md) | Build interactive HTML network/graph diagrams using vis.js |
+| [`go-tdd-workflow`](./go-tdd-workflow/SKILL.md) | Red-green-refactor TDD workflow for Go |
+| [`jenkinsctl`](./jenkinsctl/SKILL.md) | Interact with Jenkins instances using the jenkinsctl CLI |
+| [`lint-before-push`](./lint-before-push/SKILL.md) | Catch and fix lint issues before pushing a branch |
+| [`pr-qlty-triage`](./pr-qlty-triage/SKILL.md) | Triage qlty.sh code quality findings for a PR |
 
 Skills specific to the Mytheresa ecosystem live in the `mytheresa_ecosystem` repo under `skills/`.
 

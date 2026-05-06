@@ -12,3 +12,9 @@
 | ddctl-datadog-ops | skill | active | platform | `~/.codex/skills/ddctl-datadog-ops/SKILL.md` | `bash scripts/verify_repo.sh` | this repo |
 | ddctl | tool | active | platform | `go install github.com/Alechan/ai-resources/tools/ddctl/src/cmd/ddctl@latest` | `cd tools/ddctl/src && go test ./...` | this repo |
 | miro | tool | active | platform | `tools/miro/README.md` (no install — procedure doc) | `bash scripts/verify_repo.sh` | this repo |
+| jenkinsctl | skill | active | platform | `~/.codex/skills/jenkinsctl/SKILL.md` | `bash scripts/verify_repo.sh` | this repo |
+| jenkinsctl | tool | active | platform | `go install github.com/Alechan/ai-resources/tools/jenkinsctl/src/cmd/jenkinsctl@latest` | `cd tools/jenkinsctl/src && go test ./...` | this repo |
+| go-tdd-workflow | skill | active | platform | `~/.codex/skills/go-tdd-workflow/SKILL.md` | `bash scripts/verify_repo.sh` | this repo |
+| lint-before-push | skill | active | platform | `~/.codex/skills/lint-before-push/SKILL.md` | `bash scripts/verify_repo.sh` | this repo |
+| pr-qlty-triage | skill | active | platform | `~/.codex/skills/pr-qlty-triage/SKILL.md` | `bash scripts/verify_repo.sh` | this repo |
+| vis-network-diagrams | skill | active | platform | `~/.codex/skills/vis-network-diagrams/SKILL.md` | `bash scripts/verify_repo.sh` | this repo |

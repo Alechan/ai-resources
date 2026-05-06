@@ -30,7 +30,8 @@ Build polished, interactive, self-contained HTML diagrams using [vis-network](ht
   <style>
     /* ... styles ... */
     #toolbar { padding: 7px 16px; background: #fff; border-bottom: 1px solid #d0d7de; display: flex; gap: 6px; }
-    #network-container { flex: 1; }
+    /* ⚠️ If embedding in a flex parent, use min-height:0 — see gotcha #10 */
+    #network-container { flex: 1; min-height: 0; }
     #toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
              background: #24292f; color: #fff; font-size: 12px; padding: 6px 14px;
              border-radius: 6px; z-index: 100; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
@@ -191,6 +192,30 @@ function cycleRouting() {
 }
 ```
 
+**CSS for multi-tab flex layout** — all ancestors of the container must have `min-height: 0` (see gotcha #10):
+
+```css
+body        { display: flex; flex-direction: column; height: 100vh; margin: 0; }
+#main       { flex: 1; display: flex; overflow: hidden; min-height: 0; }
+#content    { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
+.tab-pane   { display: none; flex: 1; min-height: 0; overflow: hidden; }
+.tab-pane.active { display: flex; }
+.network-container { flex: 1; min-height: 0; }
+```
+
+**Bootstrap the first tab** inside `requestAnimationFrame` so layout is settled before vis.js measures the container:
+
+```js
+requestAnimationFrame(() => initDiagram('serviceA'));
+```
+
+After `initDiagram`, call `network.redraw()` + `network.fit()` as a safety net:
+
+```js
+instances[id] = { network, nodes, edges, edgeInfo };
+setTimeout(() => { network.redraw(); network.fit(); }, 50);
+```
+
 **Reset layout** for multi-tab: clear only the active tab's localStorage key, then delete the instance and re-init:
 
 ```js
@@ -308,6 +333,43 @@ nodes.add({ id: 'wp', label: '', shape: 'dot', title: 'Drag to reroute' });
 
 Queue names don't always reflect the consuming service. Legacy queues may use a different service's prefix even though they're owned/consumed by another service. Example: `tapir-email-notifications-production.fifo` is owned by Tapir but consumed by Albatross — it was renamed before ownership was transferred. Always document this explicitly in the node's `purpose` field.
 
+### 10. Multiple edges between the same two nodes — only one renders
+
+vis.js renders only one edge when two edges share the same `from`/`to` pair. The second edge is silently dropped.
+
+**Attempted workaround:** setting `smooth: { type: 'curvedCW', roundness: 0.25 }` on one edge and `curvedCCW` on the other to force them apart — this does not work because per-edge `smooth` overrides the global `setOptions` toggle (see pitfall #2), making the routing buttons stop working.
+
+**Recommended approach:** merge parallel edges into a single edge. Use `\n` in the `label` to list both endpoints, and describe both in `desc`:
+
+```js
+{ id:'e21', from:'hyena', to:'albatross',
+  label:'POST /emarsys/send\nGET /emarsys/is-subscribed',
+  desc:'Hyena calls Albatross HTTP for two operations:\n• POST /emarsys/send — newsletter signup\n• GET /emarsys/is-subscribed — subscription status check' }
+```
+
+### 11. vis.js in a flex container produces a blank canvas
+
+`vis.Network` reads `container.clientHeight` at init time. If the container is inside a flex chain and any ancestor is missing `min-height: 0`, the flex item defaults to `min-height: auto`, which can compute to `0` — vis.js then creates a zero-height canvas that renders as blank.
+
+**Fix:** add `min-height: 0` to every element in the flex chain from `<body>` down to `.network-container`:
+
+```css
+body               { display: flex; flex-direction: column; height: 100vh; margin: 0; }
+#wrapper           { flex: 1; display: flex; overflow: hidden; min-height: 0; }
+#content           { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.network-container { flex: 1; min-height: 0; }
+```
+
+Also wrap the first `initDiagram()` call in `requestAnimationFrame` so layout is computed before vis.js measures the container, and call `network.redraw()` + `network.fit()` after init as a safety net:
+
+```js
+// ✅ defer until layout is settled
+requestAnimationFrame(() => initDiagram('serviceA'));
+
+// inside initDiagram(), after instances[id] = ...
+setTimeout(() => { network.redraw(); network.fit(); }, 50);
+```
+
 ---
 
 ## Waypoint nodes for back-edges
@@ -372,6 +434,91 @@ nodes.update({ id: 'x', x: 100, y: 100 });
 function resetLayout() { localStorage.removeItem(STORAGE_KEY); location.reload(); }
 ```
 
+### Versioning layouts in git — "Copy layout" button
+
+`localStorage` is ephemeral and per-browser. For diagrams that live in a git repo, `defaultPositions` in the source file is the **versioned layout**. The pattern for keeping them in sync:
+
+1. Add a **📋 Copy layout** toolbar button.
+2. On click, call `network.getPositions()`, format as a JS object literal, and write it to the clipboard.
+3. The user pastes it over the `defaultPositions` block in the HTML source and commits.
+
+```js
+function copyLayout() {
+  const pos = network.getPositions();
+  const lines = Object.entries(pos)
+    .map(([id, { x, y }]) => `    ${id}: { x: ${Math.round(x)}, y: ${Math.round(y)} },`);
+  const text = `  defaultPositions: {\n${lines.join('\n')}\n  },`;
+  navigator.clipboard.writeText(text)
+    .then(() => showToast('Layout copied — paste over defaultPositions in the HTML'))
+    .catch(() => {
+      // Fallback for file:// origins where clipboard API is blocked
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);width:500px;height:200px;z-index:9999;font-family:monospace;font-size:11px;';
+      document.body.appendChild(ta);
+      ta.select();
+      showToast('Copy from the box, then click elsewhere to close');
+      ta.addEventListener('blur', () => ta.remove());
+    });
+}
+```
+
+Always **bump `storageKey`** (e.g. `v2` → `v3`) when restructuring a diagram so that any stale positions saved in localStorage don't silently override your new `defaultPositions`.
+
+---
+
+## Container node (visual grouping box)
+
+vis.js has no native compound/nested nodes. The workaround: insert a large, styled `box` node **first** in `nodeData` (so vis.js draws it behind everything else), then position regular nodes visually inside it.
+
+```js
+// In nodeData — MUST be first so it renders behind sub-nodes
+handler_bg: {
+  label: 'Handler',
+  group: 'container',
+  vis: {
+    widthConstraint:  { minimum: 190, maximum: 190 },
+    heightConstraint: { minimum: 460 },
+    font: { vadjust: -210 },  // push label toward top of the box
+  },
+},
+```
+
+**Style the container group** with a transparent fill and dashed border:
+
+```js
+container: {
+  shape: 'box',
+  color: { background: 'rgba(13, 110, 253, 0.06)', border: '#0969da',
+           highlight: { background: 'rgba(13, 110, 253, 0.1)', border: '#0550ae' } },
+  font:  { color: '#0550ae', size: 13 },
+  shapeProperties: { borderDashes: [6, 4] },
+},
+```
+
+**Support per-node `vis` overrides in `initDiagram`** — spread after `nodeStyle()` so they take precedence:
+
+```js
+const nodes = new vis.DataSet(Object.entries(D.nodeData).map(([nid, d]) => ({
+  id: nid, label: d.label, ...nodeStyle(d.group), ...(d.vis || {}),
+})));
+```
+
+**Re-apply `heightConstraint` after the dynamic height update** — the dynamic update sets every node to `28 + 10 * degree`. A container node has degree 0, so it would be reset to 28px:
+
+```js
+// After the dynamic height update loop:
+nodes.update(nodes.get().map(n => {
+  const d = D.nodeData[n.id];
+  if (d?.vis?.heightConstraint) return { id: n.id, heightConstraint: d.vis.heightConstraint };
+  return null;
+}).filter(Boolean));
+```
+
+**Label at the top** — use `font.vadjust` to shift the label up from the node center. For a 460px-tall box, `vadjust: -210` places the label near the top edge with a small margin.
+
+**Known limitation:** dragging the container box does not move its sub-nodes. They are independent vis.js nodes. Inform the user, or mark the container `fixed: true` to prevent accidental drags (at the cost of it not being repositionable without editing source).
+
 ---
 
 ## Dynamic node height
@@ -404,6 +551,101 @@ network.on('click', ({ nodes: clicked, edges: clickedEdges }) => {
 ```
 
 Use a separate `nodeData` / `edgeInfo` object (keyed by id) to store rich metadata that won't bloat the vis.js DataSet.
+
+**Resizable sidebar:** add a 5px drag handle div between the canvas and the sidebar. The handle intercepts `mousedown` and adjusts the sidebar's `width` on `mousemove`:
+
+```html
+<!-- In HTML: handle goes between #content and #sidebar -->
+<div id="sidebar-handle" title="Drag to resize sidebar"></div>
+<aside id="sidebar">...</aside>
+```
+
+```css
+#sidebar { width: 280px; min-width: 160px; max-width: 600px; border-left: none;
+           overflow-y: auto; flex-shrink: 0; }
+#sidebar-handle { width: 5px; background: transparent; cursor: col-resize; flex-shrink: 0;
+                  border-left: 1px solid #d0d7de; transition: background 0.15s; }
+#sidebar-handle:hover,
+#sidebar-handle.dragging { background: #0969da; border-color: #0969da; }
+```
+
+```js
+(function () {
+  const handle  = document.getElementById('sidebar-handle');
+  const sidebar = document.getElementById('sidebar');
+  let dragging = false, startX = 0, startW = 0;
+
+  handle.addEventListener('mousedown', e => {
+    dragging = true; startX = e.clientX; startW = sidebar.offsetWidth;
+    handle.classList.add('dragging');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  });
+  document.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    const delta = startX - e.clientX;   // drag left → wider
+    const min = parseInt(getComputedStyle(sidebar).minWidth);
+    const max = parseInt(getComputedStyle(sidebar).maxWidth);
+    sidebar.style.width = Math.min(max, Math.max(min, startW + delta)) + 'px';
+  });
+  document.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false; handle.classList.remove('dragging');
+    document.body.style.cursor = ''; document.body.style.userSelect = '';
+  });
+})();
+```
+
+Key points:
+- **Drag direction is inverted** (`startX - e.clientX`) because the handle is on the *left* edge of the sidebar — dragging left widens it.
+- Set `border-left: none` on `#sidebar` and own the border on `#sidebar-handle` instead — avoids a double border when the handle is visible.
+- `userSelect: none` on `<body>` during drag prevents text selection while resizing.
+
+---
+
+## Hub topology: group nodes
+
+When a service has 15+ downstream connections (pure hub), individual nodes become unreadable. Replace them with **domain-group nodes** — each group node represents a cluster of related services and expands into a member table in the sidebar on click.
+
+**Data structure:** add a `members` array to the node's `info`:
+
+```js
+g_catalog: { label: 'Catalog & Search', group: 'internal',
+  info: { type: 'Service group · 5 services',
+          purpose: 'Product catalog, search, translations, and recommendations.',
+          members: [
+            { name: 'Otter',    type: 'Internal', purpose: 'Product search.' },
+            { name: 'Magpie',   type: 'Internal', purpose: 'Catalog data.' },
+            { name: 'Anmitsu',  type: 'Internal', purpose: 'Translations.' },
+            { name: 'Mink',     type: 'Internal', purpose: 'Recommendations.' },
+            { name: 'FactFinder', type: 'External SaaS', purpose: 'Faceted search.' },
+          ]}},
+```
+
+**Sidebar rendering:** after `sidebar.innerHTML = html`, append the member table if `i.members` is set:
+
+```js
+if (i.members && i.members.length) {
+  const rows = i.members.map(m => `
+    <tr>
+      <td><strong>${m.name}</strong></td>
+      <td><span style="font-size:11px;color:${m.type==='Internal'?'#0969da':'#e16f24'}">${m.type}</span></td>
+      <td style="color:#57606a">${m.purpose}</td>
+    </tr>`).join('');
+  sidebar.innerHTML += `
+    <p class="sidebar-section">MEMBER SERVICES (${i.members.length})</p>
+    <table class="detail-table" style="width:100%">
+      <thead><tr><th>Service</th><th>Type</th><th>Role</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+```
+
+**Edge labels** on group edges should be short summaries of the whole cluster's role (e.g. `'cart · orders\npricing'`) rather than a single service's label. Put the full breakdown in `desc`.
+
+**When to use groups vs individual nodes:** use groups when a hub has ≥ 10 outbound edges that all fan out to the right — the label pile-up at the source node makes individual nodes unreadable regardless of layout. 6 group nodes with 1 edge each reads far better than 25 nodes with 25 crossing edges.
+
+**Bump `storageKey`** when restructuring a diagram (e.g. `hyena-layout-v1` → `hyena-layout-v2`) so stale per-node positions from the old structure don't confuse the new layout.
 
 ---
 
