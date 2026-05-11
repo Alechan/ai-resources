@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
-# install-skills.sh — copy all skills from both repos into ~/.kiro/skills/
+# install-skills.sh — copy skills from this repo into ~/.kiro/skills/
 #
 # Usage:
 #   bash scripts/install-skills.sh
 #
-# Run from the ai-resources repo root. The script also picks up skills from
-# the sibling mytheresa_ecosystem repo if it exists at ~/src/mytheresa_ecosystem.
+# Run from the ai-resources repo root.
 #
 # Kiro reads skills from ~/.kiro/skills/<skill-name>/SKILL.md
 # Re-running is safe: existing skill directories are replaced in-place.
@@ -17,7 +16,6 @@ set -euo pipefail
 
 SKILLS_DIR="${HOME}/.kiro/skills"
 AI_RESOURCES_SKILLS="$(cd "$(dirname "$0")/.." && pwd)/skills"
-MYT_ECOSYSTEM="${HOME}/src/mytheresa_ecosystem/skills"
 
 mkdir -p "${SKILLS_DIR}"
 
@@ -27,7 +25,6 @@ install_skill() {
   skill_name="$(basename "${skill_dir}")"
   local target="${SKILLS_DIR}/${skill_name}"
 
-  # Remove existing symlink or directory
   if [[ -L "${target}" ]]; then
     rm "${target}"
   elif [[ -d "${target}" ]]; then
@@ -48,16 +45,6 @@ echo "[ai-resources]"
 for d in "${AI_RESOURCES_SKILLS}"/*/; do
   [[ -f "${d}SKILL.md" ]] && install_skill "${d%/}"
 done
-
-echo ""
-if [[ -d "${MYT_ECOSYSTEM}" ]]; then
-  echo "[mytheresa_ecosystem]"
-  for d in "${MYT_ECOSYSTEM}"/*/; do
-    [[ -f "${d}SKILL.md" ]] && install_skill "${d%/}"
-  done
-else
-  echo "[mytheresa_ecosystem] not found at ${MYT_ECOSYSTEM} — skipping"
-fi
 
 echo ""
 echo "Done. Installed $(find "${SKILLS_DIR}" -maxdepth 1 -type d | tail -n +2 | wc -l | tr -d ' ') skills."

@@ -68,10 +68,10 @@ jenkinsctl build status <JOB_NAME> --url <JENKINS_URL>
 
 ```bash
 # Top-level job
-jenkinsctl build status "albatross" --url $JENKINS_URL
+jenkinsctl build status "<SERVICE>" --url $JENKINS_URL
 
 # Nested job (folder/pipeline)
-jenkinsctl build status "albatross/job/pre-prod-pipeline" --url $JENKINS_URL
+jenkinsctl build status "<SERVICE>/job/<PIPELINE>" --url $JENKINS_URL
 ```
 
 ---
@@ -80,12 +80,12 @@ jenkinsctl build status "albatross/job/pre-prod-pipeline" --url $JENKINS_URL
 
 ```bash
 # Check if Jenkins is reachable
-jenkinsctl doctor --url https://jenkins-x.test.mytheresa.services
+jenkinsctl doctor --url $JENKINS_URL
 
 # List all jobs
-jenkinsctl job list --url https://jenkins-x.test.mytheresa.services
+jenkinsctl job list --url $JENKINS_URL
 
 # Check the latest build of a pipeline
-jenkinsctl build status "albatross/job/pre-prod-pipeline" --url https://jenkins-x.test.mytheresa.services
+jenkinsctl build status "<SERVICE>/job/<PIPELINE>" --url $JENKINS_URL
 # Output: Build #1: SUCCESS
 ```
