@@ -36,6 +36,16 @@ go install ./cmd/jenkinsctl/
 | `JENKINS_USERNAME` | Your Jenkins username |
 | `JENKINS_API_TOKEN` | Your personal Jenkins API token |
 
+### API Token Rotation
+
+Jenkins API tokens expire frequently (may need daily regeneration). If you get a `401` error, the token has expired.
+
+**To generate a new token:**
+1. Go to your Jenkins user configuration page: `<JENKINS_URL>/user/<YOUR_USERNAME>/configure`
+2. Scroll to the **API Token** section
+3. Click **Add new Token**, give it a name, click **Generate**
+4. Copy the token and update your `JENKINS_API_TOKEN` environment variable
+
 ---
 
 ## Commands

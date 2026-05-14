@@ -1,7 +1,8 @@
 # ddctl Tool Resource
 
 `ddctl` is an unofficial DataDog CLI maintained in this repository under `tools/ddctl/src`.
-It authenticates using DataDog session cookies stored in the macOS Keychain. All operations are **read-only**.
+It authenticates using DataDog session cookies stored in the macOS Keychain.
+Most commands are read-only; notebook create/update commands perform explicit user-requested writes.
 
 ## Quick Start
 
@@ -108,6 +109,8 @@ Commands:
   monitors-list   List DataDog monitors
   monitors-get    Get a specific DataDog monitor by ID
   events-list     List DataDog events
+  metrics-query   Query DataDog timeseries metrics
+  notebooks       Manage DataDog notebooks (get/create/update/validate)
 
 Global flags:
   --site <domain>        DataDog site domain (default: datadoghq.com)
@@ -206,10 +209,52 @@ ddctl metrics-query --query "avg:system.cpu.user{*}" --from now-4h --json
 ddctl metrics-query --query "avg:system.cpu.user{*}" --from now-1h --json --raw
 ```
 
+### notebooks
+
+Manage DataDog notebooks through browser-authenticated API endpoints.
+
+```bash
+# Get notebook summary (text)
+ddctl notebooks get 14515133
+
+# Get raw notebook JSON
+ddctl --json notebooks get 14515133 > notebook.json
+
+# Create notebook from file
+ddctl notebooks create --from-file notebook-create.json --name "My notebook" --time 1w
+
+# Update notebook (full replacement; explicit confirmation required)
+ddctl notebooks update 14515133 --from-file notebook-update.json --replace-all
+
+# Validate notebook payload and preflight timeseries queries
+ddctl notebooks validate --from-file notebook.json --from now-30d
+ddctl notebooks validate --from-file notebook.json --from now-30d --allow-empty-series
+```
+
+`notebooks create` and `notebooks update` accept these file shapes:
+
+1. Full API envelope:
+```json
+{"data":{"type":"notebooks","attributes":{...}}}
+```
+
+2. Attributes-only envelope:
+```json
+{"attributes":{...}}
+```
+
+Notes:
+- `update` is full replacement (`PUT`), not patch.
+- `--replace-all` is mandatory for update.
+- `attributes.name`, `attributes.time`, and non-empty `attributes.cells` are required.
+
 - **Credentials not found**: run `ddctl init --cookie '<cookie str>' --csrf-token '<csrf token>'`.
 - **Auth failures (HTTP 401/403)**: your session has expired; re-run `ddctl init` with a fresh cURL from the Logs Explorer.
 - **logs-query returns 401 but doctor passes**: missing CSRF token. Re-run `ddctl init` with `--csrf-token`.
 - **events-list returns 401**: the `/api/v1/events` endpoint may not accept session-cookie auth on your DataDog instance; report the issue.
+- **Template endpoint 404**: `GET /api/v1/notebooks/template/{id}` may return 404. Clone the template in UI first, then use the cloned notebook ID.
+- **Blank notebook charts**: preflight timeseries with `ddctl notebooks validate` or `ddctl metrics-query` before writing.
+- **SQS metric with no data**: avoid `kube_namespace` filters on `aws.sqs.*`; scope by `queuename` tags.
 - **Keychain access denied**: macOS may prompt for keychain access; accept the prompt.
 - **`command not found`**: ensure `$GOPATH/bin` (or `$HOME/go/bin`) is on `PATH`.
 - **Network errors**: verify connectivity to `app.datadoghq.com`; retry with `--timeout 60s`.

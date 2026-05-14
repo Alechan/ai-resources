@@ -69,6 +69,35 @@ func (c *Client) Post(ctx context.Context, path string, body, out any) error {
 	return c.do(req, out)
 }
 
+// Put performs an authenticated PUT request with a JSON body and decodes the JSON response into out.
+// If a CSRF token cookie is present, it is automatically injected as _authentication_token in the
+// request body (required by DataDog's browser UI endpoints).
+func (c *Client) Put(ctx context.Context, path string, body, out any) error {
+	b, err := json.Marshal(body)
+	if err != nil {
+		return fail.NewAPI("failed to marshal request body", "", err.Error())
+	}
+	// Inject _authentication_token from CSRF cookie if available.
+	if csrf := c.csrfToken(); csrf != "" {
+		var m map[string]any
+		if json.Unmarshal(b, &m) == nil {
+			m["_authentication_token"] = csrf
+			if rb, err := json.Marshal(m); err == nil {
+				b = rb
+			}
+		}
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, c.baseURL()+path, bytes.NewReader(b))
+	if err != nil {
+		return fail.MapNetworkOrAPI(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if err := c.addAuth(req); err != nil {
+		return err
+	}
+	return c.do(req, out)
+}
+
 // csrfToken returns the CSRF token value from stored cookies, or empty string if not found.
 func (c *Client) csrfToken() string {
 	cookies, err := c.cookies.Cookies()

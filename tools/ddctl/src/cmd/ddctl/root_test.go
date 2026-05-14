@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 )
 
@@ -13,6 +14,9 @@ func TestExecuteHelp(t *testing.T) {
 	}
 	if stdout.Len() == 0 {
 		t.Error("expected usage output on --help, got nothing")
+	}
+	if !strings.Contains(stdout.String(), "notebooks") {
+		t.Fatalf("expected usage output to include notebooks command, got:\n%s", stdout.String())
 	}
 }
 

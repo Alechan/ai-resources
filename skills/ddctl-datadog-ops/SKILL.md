@@ -1,13 +1,13 @@
 ---
 name: ddctl-datadog-ops
-description: Procedures for querying DataDog logs, metrics, and monitors using the ddctl CLI tool. Use when asked to investigate DataDog alerts, check service health, query logs, or list monitors.
+description: Procedures for querying DataDog logs, metrics, monitors, and notebooks using the ddctl CLI tool. Use when investigating DataDog alerts, checking service health, querying logs/metrics, or reading/updating notebooks.
 ---
 
 # ddctl-datadog-ops
 
 ## Purpose
 
-Provide a repeatable procedure for querying DataDog logs and checking DataDog health via `ddctl`.
+Provide a repeatable procedure for querying DataDog logs, metrics, monitors, and notebooks via `ddctl`.
 
 ## When To Use
 
@@ -15,6 +15,7 @@ Provide a repeatable procedure for querying DataDog logs and checking DataDog he
 - Checking DataDog reachability and verifying session cookie authentication.
 - Iterative log investigation: narrowing down a time window or refining a query based on results.
 - Confirming DataDog connectivity before beginning a deeper investigation.
+- Reading or updating DataDog notebooks through CLI automation.
 
 ## Inputs
 
@@ -144,6 +145,36 @@ Text output shows per-series summary stats: `min`, `avg`, `max`, `last`, point c
 
 Refine the query based on results; summarize findings with timestamps, services, and log lines.
 
+### Step 9 — Notebook operations (optional)
+
+Use notebook commands when the task requires shareable incident writeups or reproducible dashboard notes.
+
+```bash
+# Read notebook
+ddctl notebooks get <id>
+ddctl --json notebooks get <id> > notebook.json
+
+# Validate notebook payload (timeseries preflight)
+ddctl notebooks validate --from-file notebook.json --from now-30d
+
+# Create notebook
+ddctl notebooks create --from-file notebook-create.json --name "Incident notebook" --time 1w
+
+# Update notebook (full replacement)
+ddctl notebooks update <id> --from-file notebook-update.json --replace-all
+```
+
+Notebook update caveats:
+- `PUT` is full replacement, not patch.
+- `--replace-all` is required.
+- `attributes.name`, `attributes.time`, and non-empty `attributes.cells` must be present.
+- `GET /api/v1/notebooks/template/{id}` may return 404; clone template in UI first, then operate on the cloned notebook ID.
+
+Timeseries query caveats:
+- Validate queries before write to avoid blank charts.
+- `aws.sqs.*` metrics are typically scoped by queue tags (`queuename`), not `kube_namespace`.
+- Strict `pod_name` prefixes can go stale; prefer stable service/namespace metrics where possible.
+
 ## Validation
 
 - `ddctl doctor` shows `credentials found: true` and `datadog reachable: true`.
@@ -151,6 +182,8 @@ Refine the query based on results; summarize findings with timestamps, services,
 - `ddctl monitors-list` returns a list of monitors (even if empty).
 - `ddctl events-list --from now-2h` returns events or empty; HTTP 401 = endpoint needs investigation.
 - `ddctl metrics-query --query "avg:system.cpu.user{*}" --from now-1h` returns series or "no data".
+- `ddctl notebooks get <id>` returns notebook details without error.
+- `ddctl notebooks validate --from-file <file>` reports timeseries queries and catches empty-series risks.
 
 ## Known obstacles and workarounds
 
@@ -189,7 +222,9 @@ This is the exact endpoint `ddctl logs-query` calls. Copying a cURL from this re
 
 ## Safety
 
-- **Read-only**: `ddctl` performs no writes or mutations in DataDog.
+- Most `ddctl` commands are read-only. Notebook `create`/`update` commands mutate DataDog notebooks.
+- Do not run notebook mutation commands unless the user explicitly asked for notebook creation/update.
+- For updates, prefer: get → edit file → validate → update with `--replace-all`.
 - Stop and report to the user if DataDog returns authentication errors (HTTP 401/403).
 - Do not store or log raw cookie values.
 - Do not use `ddctl` to access DataDog data outside the scope authorized for the current session.

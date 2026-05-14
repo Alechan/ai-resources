@@ -10,20 +10,22 @@ import (
 )
 
 type Services struct {
-	Auth          *auth.KeychainProvider
-	Doctor        *service.DoctorService
-	LogsQuery     *service.LogsQueryService
-	MonitorsList  *service.MonitorsListService
-	MonitorsGet   *service.MonitorsGetService
-	EventsList    *service.EventsListService
-	MetricsQuery  *service.MetricsQueryService
-	Output        *output.Writer
+	Auth         *auth.KeychainProvider
+	Doctor       *service.DoctorService
+	LogsQuery    *service.LogsQueryService
+	MonitorsList *service.MonitorsListService
+	MonitorsGet  *service.MonitorsGetService
+	EventsList   *service.EventsListService
+	MetricsQuery *service.MetricsQueryService
+	Notebooks    *service.NotebooksService
+	Output       *output.Writer
 }
 
 func NewServices(cfg Config) Services {
 	httpClient := &http.Client{Timeout: cfg.Timeout}
 	authProvider := auth.NewKeychainProvider(cfg.Site)
 	ddClient := datadogapi.NewClient(httpClient, cfg.Site, authProvider)
+	metricsSvc := service.NewMetricsQueryService(ddClient)
 
 	return Services{
 		Auth:         authProvider,
@@ -32,7 +34,8 @@ func NewServices(cfg Config) Services {
 		MonitorsList: service.NewMonitorsListService(ddClient, cfg.Site),
 		MonitorsGet:  service.NewMonitorsGetService(ddClient, cfg.Site),
 		EventsList:   service.NewEventsListService(ddClient),
-		MetricsQuery: service.NewMetricsQueryService(ddClient),
+		MetricsQuery: metricsSvc,
+		Notebooks:    service.NewNotebooksService(ddClient, metricsSvc),
 		Output:       output.NewWriter(),
 	}
 }
