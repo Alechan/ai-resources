@@ -28,6 +28,7 @@ Where:
 - `main` is the main-branch worktree.
 - `<branch-name>` entries are feature worktrees.
 - `wt-shared` stores non-repo local artifacts shared across worktrees.
+- Each worktree should also contain a symlink named `wt-shared` pointing to `../wt-shared` so IDEs like GoLand show the shared folder when opening the worktree root.
 
 ---
 
@@ -35,8 +36,10 @@ Where:
 
 1. Run code/read commands from a worktree path (`.../main` or another branch worktree), not from the container root.
 2. Keep `wt-shared` out of Git and use it for notes, generated artifacts, and temporary analysis outputs.
-3. Use absolute paths for destructive filesystem operations.
-4. Clarify flatten operations explicitly:
+3. Create or refresh the `wt-shared` symlink inside every worktree before opening it in the IDE.
+4. Ensure the repo-local exclude file contains `.idea/` and `wt-shared`; check first and append only if the patterns are missing.
+5. Use absolute paths for destructive filesystem operations.
+6. Clarify flatten operations explicitly:
    - **Recursive flatten:** move all nested files to root.
    - **One-level collapse:** move only immediate children of first-level directories.
 
@@ -58,6 +61,19 @@ git --git-dir=~/src/<repos-root>/<repo-name>/repo.git \
 
 # Create shared folder
 mkdir -p ~/src/<repos-root>/<repo-name>/wt-shared
+
+# Link shared folder into each worktree for IDE visibility
+ln -sfn ../wt-shared ~/src/<repos-root>/<repo-name>/main/wt-shared
+ln -sfn ../wt-shared ~/src/<repos-root>/<repo-name>/<branch-name>/wt-shared
+
+# Add repo-local ignores once per repo container if missing
+append_ignore() {
+  local pattern="$1"
+  local exclude_file="${HOME}/src/<repos-root>/<repo-name>/repo.git/info/exclude"
+  grep -qxF "${pattern}" "${exclude_file}" || printf '%s\n' "${pattern}" >> "${exclude_file}"
+}
+append_ignore '.idea/'
+append_ignore 'wt-shared'
 ```
 
 ---
