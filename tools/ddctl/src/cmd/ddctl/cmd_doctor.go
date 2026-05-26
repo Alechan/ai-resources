@@ -37,8 +37,16 @@ func runDoctorCmd(ctx context.Context, svcs app.Services, cfg app.Config, args [
 	fmt.Fprintf(stdout, "credentials found: %t\n", report.CredentialsFound)
 	fmt.Fprintf(stdout, "session cookies: %d\n", report.SessionCookies)
 	fmt.Fprintf(stdout, "datadog reachable: %t\n", report.DataDogReachable)
+	fmt.Fprintf(stdout, "auth query valid: %t\n", report.AuthQueryValid)
 	if report.Note != "" {
 		fmt.Fprintf(stdout, "note: %s\n", report.Note)
+	}
+
+	if !report.DataDogReachable {
+		return fail.CodeNetwork
+	}
+	if !report.CredentialsFound || report.SessionCookies == 0 || !report.AuthQueryValid {
+		return fail.CodeAuth
 	}
 	return fail.CodeOK
 }

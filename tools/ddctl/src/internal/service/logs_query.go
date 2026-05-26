@@ -11,11 +11,12 @@ import (
 
 // LogsQueryInput holds the parameters for a logs search request.
 type LogsQueryInput struct {
-	Query  string
-	From   string
-	To     string
-	Limit  int
-	Cursor string // pagination cursor from a previous result's NextCursor field
+	Query     string
+	From      string
+	To        string
+	Limit     int
+	Cursor    string // pagination cursor from a previous result's NextCursor field
+	CountOnly bool
 }
 
 // LogEvent represents a single log event from DataDog.
@@ -35,8 +36,13 @@ type LogEventAttributes struct {
 
 // LogsQueryResult is the response from the DataDog logs search API.
 type LogsQueryResult struct {
-	Data       []LogEvent `json:"data"`
-	NextCursor string     `json:"next_cursor,omitempty"`
+	Data          []LogEvent `json:"data,omitempty"`
+	NextCursor    string     `json:"next_cursor,omitempty"`
+	HitCount      int        `json:"hit_count"`
+	Warnings      []string   `json:"warnings,omitempty"`
+	Truncated     bool       `json:"truncated,omitempty"`
+	ReturnedCount int        `json:"returned_count,omitempty"`
+	Limit         int        `json:"limit,omitempty"`
 }
 
 // v1 internal response types — the browser UI endpoint structure.
@@ -106,9 +112,9 @@ func (s *LogsQueryService) Run(ctx context.Context, input LogsQueryInput) (LogsQ
 		"sorts":                []map[string]any{{"time": map[string]any{"order": "desc"}}},
 		"limit":                input.Limit,
 		"time":                 map[string]any{"from": fromMs, "to": toMs},
-		"includeEvents":        true,
-		"includeEventContents": true,
-		"computeCount":         false,
+		"includeEvents":        !input.CountOnly,
+		"includeEventContents": !input.CountOnly,
+		"computeCount":         true,
 		"indexes":              []string{"*"},
 		"executionInfo":        map[string]any{},
 	}
@@ -130,14 +136,25 @@ func (s *LogsQueryService) Run(ctx context.Context, input LogsQueryInput) (LogsQ
 	}
 
 	result := LogsQueryResult{}
-	for _, ev := range raw.Result.Events {
-		attrs := extractEventAttrs(ev)
-		result.Data = append(result.Data, LogEvent{
-			ID:         ev.ID,
-			Attributes: attrs,
-		})
+	result.HitCount = raw.HitCount
+
+	if !input.CountOnly {
+		for _, ev := range raw.Result.Events {
+			attrs := extractEventAttrs(ev)
+			result.Data = append(result.Data, LogEvent{
+				ID:         ev.ID,
+				Attributes: attrs,
+			})
+		}
+		result.ReturnedCount = len(result.Data)
+		result.NextCursor = raw.Result.Paging.After
 	}
-	result.NextCursor = raw.Result.Paging.After
+
+	if raw.HitCount == 0 && len(raw.Result.Events) > 0 {
+		result.Warnings = append(result.Warnings,
+			"hitCount is 0 but events were returned; these may be housekeeping/non-matching rows")
+	}
+
 	return result, nil
 }
 

@@ -135,14 +135,22 @@ ddctl init --cookie 'dogweb=...; _dd_s_v2=...' --csrf-token 'abc123'
 ddctl init --clear
 ```
 
+Notes:
+- `init` sanitizes cookie fragments and drops invalid entries (names only are reported).
+- Valid auth material requires:
+  - CSRF token (`dd_csrf_token` / `_csrf`)
+  - at least one session cookie (`dogweb` / `dogwebu` / `_dd_s_v2`)
+
 ### doctor
 
-Check that credentials exist in Keychain and DataDog is reachable.
+Check credentials exist, DataDog is reachable, and authentication works via a lightweight query.
 
 ```bash
 ddctl doctor
 ddctl doctor --json
 ```
+
+`doctor` exits non-zero if auth validation fails.
 
 ### logs-query
 
@@ -157,9 +165,21 @@ ddctl logs-query --cursor '<next_cursor value>'
 
 # Auto-paginate up to --limit total events
 ddctl logs-query --all --limit 200
+
+# Count-only mode (total matches, metadata-only output)
+ddctl logs-query --query "service:my-service" --from now-1h --count-only --json
 ```
 
 Accepted time formats: `now`, `now-1h`, `now-30m`, `now-2d`, `now-1w`, Unix milliseconds, RFC3339.
+
+Notes:
+- Output includes `hit_count` in text and JSON.
+- When Datadog returns rows with `hitCount=0`, `warnings` are emitted.
+- When `--all --limit` truncates results, JSON includes:
+  - `truncated`
+  - `returned_count`
+  - `limit`
+  - `hit_count` (when available)
 
 ### monitors-list
 
