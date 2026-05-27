@@ -2,7 +2,6 @@ package service
 
 import (
 	"encoding/json"
-	"fmt"
 	"github.com/alejandro-danos/jenkinsctl/internal/jenkinsapi"
 	"net/http"
 )
@@ -33,7 +32,7 @@ func (s *JobService) ListJobs() ([]Job, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return nil, classifyHTTPError(resp, s.client.BuildURL("api/json"))
 	}
 
 	var result JobListResponse

@@ -1,12 +1,12 @@
 package service
 
 import (
-	"github.com/alejandro-danos/jenkinsctl/internal/app"
-	"github.com/alejandro-danos/jenkinsctl/internal/auth"
-	"github.com/alejandro-danos/jenkinsctl/internal/jenkinsapi"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"github.com/alejandro-danos/jenkinsctl/internal/jenkinsapi"
 )
 
 func TestCheckConnectivity_Success(t *testing.T) {
@@ -15,8 +15,7 @@ func TestCheckConnectivity_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	cfg := &app.Config{Username: "u", APIToken: "t"}
-	client := jenkinsapi.New(server.URL, auth.New(cfg))
+	client := jenkinsapi.New(server.URL, "u", "t")
 	svc := NewDoctorService(client)
 
 	if err := svc.CheckConnectivity(); err != nil {
@@ -26,15 +25,29 @@ func TestCheckConnectivity_Success(t *testing.T) {
 
 func TestCheckConnectivity_Fail(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusForbidden)
+		w.WriteHeader(http.StatusUnauthorized)
 	}))
 	defer server.Close()
 
-	cfg := &app.Config{Username: "u", APIToken: "t"}
-	client := jenkinsapi.New(server.URL, auth.New(cfg))
+	client := jenkinsapi.New(server.URL+"/acceptance", "u", "t")
 	svc := NewDoctorService(client)
 
-	if err := svc.CheckConnectivity(); err == nil {
+	err := svc.CheckConnectivity()
+	if err == nil {
 		t.Fatal("expected error, got nil")
+	}
+
+	message := err.Error()
+	if !strings.Contains(message, "kind=auth") {
+		t.Fatalf("expected auth taxonomy, got: %s", message)
+	}
+	if !strings.Contains(message, "status=401") {
+		t.Fatalf("expected status code details, got: %s", message)
+	}
+	if !strings.Contains(message, "auth_context=acceptance") {
+		t.Fatalf("expected auth context label, got: %s", message)
+	}
+	if !strings.Contains(message, "hint=") {
+		t.Fatalf("expected remediation hint, got: %s", message)
 	}
 }

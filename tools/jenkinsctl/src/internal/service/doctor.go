@@ -1,7 +1,6 @@
 package service
 
 import (
-	"fmt"
 	"github.com/alejandro-danos/jenkinsctl/internal/jenkinsapi"
 	"net/http"
 )
@@ -21,7 +20,7 @@ func (s *DoctorService) CheckConnectivity() error {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return classifyHTTPError(resp, s.client.BuildURL("api/json"))
 	}
 	return nil
 }

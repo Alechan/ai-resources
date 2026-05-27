@@ -2,30 +2,38 @@ package jenkinsapi
 
 import (
 	"fmt"
-	"github.com/alejandro-danos/jenkinsctl/internal/auth"
 	"net/http"
 )
 
 type Client struct {
-	baseURL string
-	auth    *auth.Provider
-	http    *http.Client
+	baseURL  string
+	username string
+	token    string
+	http     *http.Client
 }
 
-func New(baseURL string, authProvider *auth.Provider) *Client {
+func New(baseURL, username, token string) *Client {
 	return &Client{
-		baseURL: baseURL,
-		auth:    authProvider,
-		http:    &http.Client{},
+		baseURL:  baseURL,
+		username: username,
+		token:    token,
+		http: &http.Client{
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		},
 	}
 }
 
 func (c *Client) Get(path string) (*http.Response, error) {
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s/%s", c.baseURL, path), nil)
+	req, err := http.NewRequest("GET", c.BuildURL(path), nil)
 	if err != nil {
 		return nil, err
 	}
-	u, t := c.auth.BasicAuth()
-	req.SetBasicAuth(u, t)
+	req.SetBasicAuth(c.username, c.token)
 	return c.http.Do(req)
+}
+
+func (c *Client) BuildURL(path string) string {
+	return fmt.Sprintf("%s/%s", c.baseURL, path)
 }
