@@ -2,8 +2,9 @@ package main
 
 import (
 	"fmt"
-	"github.com/spf13/cobra"
 	"os"
+
+	"github.com/spf13/cobra"
 )
 
 var rootCmd = &cobra.Command{
@@ -18,8 +19,17 @@ func Execute() {
 	}
 }
 
-var url string
+var (
+	url   string
+	user  string
+	token string
+)
 
 func init() {
-	rootCmd.PersistentFlags().StringVarP(&url, "url", "u", "", "Jenkins URL")
+	rootCmd.PersistentFlags().StringVarP(&url, "url", "u", "", "Jenkins instance URL (required)")
+	rootCmd.PersistentFlags().StringVar(&user, "user", "", "Jenkins username (required)")
+	rootCmd.PersistentFlags().StringVar(&token, "token", "", "Jenkins API token (required)")
+	_ = rootCmd.MarkPersistentFlagRequired("url")
+	_ = rootCmd.MarkPersistentFlagRequired("user")
+	_ = rootCmd.MarkPersistentFlagRequired("token")
 }

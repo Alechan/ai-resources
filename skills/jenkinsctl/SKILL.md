@@ -29,22 +29,52 @@ go install ./cmd/jenkinsctl/
 
 ---
 
-## Required Environment Variables
+## Required Flags
+
+All credentials and connection details are passed via command-line flags:
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--url` | `-u` | Jenkins instance URL |
+| `--user` | | Jenkins username |
+| `--token` | | Jenkins API token |
+
+All three flags are required for every command.
+
+### Recommended usage
+
+Pass credentials via environment variables at the call site to avoid them appearing in shell history:
+
+```bash
+jenkinsctl --url "$JENKINS_URL" --user "$JENKINS_USERNAME" --token "$JENKINS_TOKEN" doctor
+```
+
+### Recommended environment variables
+
+Set these in a sourced file (e.g. `~/.keys/tokens.zsh`):
 
 | Variable | Description |
 |----------|-------------|
-| `JENKINS_USERNAME` | Your Jenkins username |
-| `JENKINS_API_TOKEN` | Your personal Jenkins API token |
+| `JENKINS_USERNAME` | Your Jenkins username (shared across instances) |
+| `JENKINS_CI_URL` | CI instance URL (builds, PR checks) |
+| `JENKINS_CI_TOKEN` | API token for CI instance |
+| `JENKINS_ACCEPTANCE_URL` | Deploy instance URL (dev/test/acceptance) |
+| `JENKINS_ACCEPTANCE_TOKEN` | API token for deploy instance |
+| `JENKINS_PROD_URL` | Production deploy instance URL |
+| `JENKINS_PROD_TOKEN` | API token for production instance |
 
-### API Token Rotation
+The CLI does **not** read environment variables directly. This keeps the tool generic and stateless.
 
-Jenkins API tokens expire frequently (may need daily regeneration). If you get a `401` error, the token has expired.
+### Token rotation
 
-**To generate a new token:**
+Jenkins API tokens may expire frequently. If you get a `401` error, regenerate the token:
+
 1. Go to your Jenkins user configuration page: `<JENKINS_URL>/user/<YOUR_USERNAME>/configure`
 2. Scroll to the **API Token** section
 3. Click **Add new Token**, give it a name, click **Generate**
-4. Copy the token and update your `JENKINS_API_TOKEN` environment variable
+4. Copy the token and update the corresponding environment variable
+
+Note: different Jenkins instances require separate tokens. A token generated on one instance will not work on another.
 
 ---
 
@@ -52,50 +82,75 @@ Jenkins API tokens expire frequently (may need daily regeneration). If you get a
 
 ### Connectivity Check
 
-Verify connectivity to a Jenkins instance:
-
 ```bash
-jenkinsctl doctor --url <JENKINS_URL>
+jenkinsctl --url "$JENKINS_URL" --user "$JENKINS_USERNAME" --token "$JENKINS_TOKEN" doctor
 ```
 
 ### List Jobs
 
-List all available jobs:
-
 ```bash
-jenkinsctl job list --url <JENKINS_URL>
+jenkinsctl --url "$JENKINS_URL" --user "$JENKINS_USERNAME" --token "$JENKINS_TOKEN" job list
 ```
 
 ### Build Status
 
-Retrieve the status of the last build for a specific job:
-
 ```bash
-jenkinsctl build status <JOB_NAME> --url <JENKINS_URL>
+jenkinsctl --url "$JENKINS_URL" --user "$JENKINS_USERNAME" --token "$JENKINS_TOKEN" build status <JOB_NAME>
 ```
 
 **Job name format for nested jobs:** Use `/job/` as the path separator.
 
 ```bash
-# Top-level job
-jenkinsctl build status "<SERVICE>" --url $JENKINS_URL
-
 # Nested job (folder/pipeline)
-jenkinsctl build status "<SERVICE>/job/<PIPELINE>" --url $JENKINS_URL
+jenkinsctl --url "$JENKINS_URL" --user "$JENKINS_USERNAME" --token "$JENKINS_TOKEN" build status "myservice/job/pre-prod-pipeline"
 ```
+
+**Output format:**
+
+```
+state=succeeded build=42
+state=failed build=43 url=https://jenkins.example.com/job/myservice/job/pre-prod-pipeline/43/
+state=running build=44 url=https://jenkins.example.com/job/myservice/job/pre-prod-pipeline/44/
+```
+
+- `state` values: `succeeded`, `failed`, `aborted`, `unstable`, `running`, `queued`, `blocked`, `unknown`
+- `url` is omitted when `state=succeeded` (no action needed)
 
 ---
 
-## Examples
+## Error output
+
+Errors use structured `key=value` format:
+
+```
+# Auth failure (401/403)
+kind=auth status=401 url=https://jenkins.example.com/... auth_context=acceptance hint=verify --url points to the intended Jenkins instance and regenerate the token for that same instance
+
+# Job not found
+kind=not_found status=404 url=https://jenkins.example.com/job/myservice/ hint=check the job path and use '/job/' separators for nested folders (e.g. folder/job/pipeline)
+
+# SSO redirect
+kind=redirect status=302 url=https://jenkins.example.com/... location=https://sso.example.com/login hint=use the final Jenkins base URL directly (avoid SSO/login redirect endpoints)
+```
+
+When `kind=auth`, regenerate the token for the specific Jenkins instance in `--url`. Tokens are not shared across instances.
+
+---
+
+## Shell aliases (optional)
+
+For convenience, define aliases that wire up instance-specific credentials:
 
 ```bash
-# Check if Jenkins is reachable
-jenkinsctl doctor --url $JENKINS_URL
+alias jci='jenkinsctl --url "$JENKINS_CI_URL" --user "$JENKINS_USERNAME" --token "$JENKINS_CI_TOKEN"'
+alias jacc='jenkinsctl --url "$JENKINS_ACCEPTANCE_URL" --user "$JENKINS_USERNAME" --token "$JENKINS_ACCEPTANCE_TOKEN"'
+alias jprod='jenkinsctl --url "$JENKINS_PROD_URL" --user "$JENKINS_USERNAME" --token "$JENKINS_PROD_TOKEN"'
+```
 
-# List all jobs
-jenkinsctl job list --url $JENKINS_URL
+Then usage becomes:
 
-# Check the latest build of a pipeline
-jenkinsctl build status "<SERVICE>/job/<PIPELINE>" --url $JENKINS_URL
-# Output: Build #1: SUCCESS
+```bash
+jci doctor
+jci build status "myservice/job/pre-prod-pipeline"
+jacc build status "Deploy"
 ```

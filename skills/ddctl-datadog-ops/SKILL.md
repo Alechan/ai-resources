@@ -85,7 +85,7 @@ The skill can tell the user to run this command; it cannot execute interactive t
 ddctl doctor
 ```
 
-Expected output: `credentials found: true`, `datadog reachable: true`.
+Expected output: `credentials found: true`, `datadog reachable: true`, `auth query valid: true`.
 If `datadog reachable: false` or you get HTTP 401, the cookies are expired — go back to Step 1.
 
 ### Step 4 — Query logs
@@ -93,6 +93,9 @@ If `datadog reachable: false` or you get HTTP 401, the cookies are expired — g
 ```
 ddctl logs-query --query "service:<name> status:error" --from now-1h
 ddctl logs-query --query "*" --from now-4h --limit 50 --json
+
+# Count first for large windows
+ddctl logs-query --query "service:<name>" --from now-24h --count-only --json
 
 # Single-page result shows cursor hint if more pages exist:
 # next_cursor: Aw...
@@ -104,6 +107,22 @@ ddctl logs-query --all --limit 200
 ```
 
 Supported `--from`/`--to` formats: `now`, `now-1h`, `now-30m`, `now-2d`, `now-1w`, Unix milliseconds, RFC3339.
+
+### Step 4.1 — Field discovery workflow (mandatory)
+
+1. Start with `--count-only` to verify there is data before sampling rows.
+2. Run a narrow query and inspect returned fields (`timestamp`, `status`, `service`, `host`, `message`).
+3. If needed fields are missing, assume they are not queryable from this endpoint and move to Dashboard/raw logs.
+4. Treat `hit_count` as the source of truth for matching volume.
+5. If `hit_count=0` but rows are returned, treat rows as housekeeping/noise unless proven otherwise.
+
+### Step 4.2 — Logged fields vs queryable fields
+
+- Application code may log structured fields (e.g. `log.WithField("panic_stacktrace", ...)`).
+- DataDog can store them, but `ddctl logs-query` may not expose them as queryable/returned fields.
+- Practical rule:
+  1. query with standard fields first,
+  2. then use Dashboard/raw logs for deep structured payload inspection.
 
 ### Step 5 — List monitors
 
@@ -177,8 +196,9 @@ Timeseries query caveats:
 
 ## Validation
 
-- `ddctl doctor` shows `credentials found: true` and `datadog reachable: true`.
+- `ddctl doctor` shows `credentials found: true`, `datadog reachable: true`, and `auth query valid: true`.
 - `ddctl logs-query --query "*" --limit 1` returns at least one log event or empty result without error.
+- `ddctl logs-query --count-only --query "*" --from now-1h --json` returns metadata with `hit_count`.
 - `ddctl monitors-list` returns a list of monitors (even if empty).
 - `ddctl events-list --from now-2h` returns events or empty; HTTP 401 = endpoint needs investigation.
 - `ddctl metrics-query --query "avg:system.cpu.user{*}" --from now-1h` returns series or "no data".
@@ -189,12 +209,39 @@ Timeseries query caveats:
 
 ### HTTP 401 from logs-query even after a successful doctor
 
-`ddctl doctor` only checks GET reachability. The logs query uses a POST endpoint that requires
-the `x-csrf-token` header and `_authentication_token` body field. These come from the CSRF token
-stored during `ddctl init`.
+`ddctl` relies on browser session cookies and CSRF token. If auth is stale server-side, queries fail.
 
 **Fix:** Re-run `ddctl init` using a cURL from the Logs Explorer page, which always has `x-csrf-token`.
 Make sure to pass `--csrf-token` (or use `--curl` which extracts it automatically).
+
+### `hit_count` vs returned rows mismatch
+
+When `hit_count=0` but rows are returned, those rows are often housekeeping/retention records and not true matches.
+
+**Fix:** treat `hit_count` as authoritative for query matching, then refine query/time window and sample again.
+
+## Incident templates
+
+### Endpoint-focused investigation
+
+```bash
+ddctl logs-query --query 'service:<svc> kube_namespace:<env> @request.endpoint:"<endpoint>"' --from now-2h --count-only --json
+ddctl logs-query --query 'service:<svc> kube_namespace:<env> @request.endpoint:"<endpoint>"' --from now-2h --all --limit 200 --json
+```
+
+### Identity/email-focused investigation
+
+```bash
+ddctl logs-query --query 'service:<svc> kube_namespace:<env> *<email-or-id>*' --from now-24h --count-only --json
+ddctl logs-query --query 'service:<svc> kube_namespace:<env> *<email-or-id>*' --from now-24h --all --limit 200 --json
+```
+
+### Error-vs-throughput investigation
+
+```bash
+ddctl logs-query --query 'service:<svc> kube_namespace:<env> status:error' --from now-2h --count-only --json
+ddctl logs-query --query 'service:<svc> kube_namespace:<env> <throughput-signal-query>' --from now-2h --count-only --json
+```
 
 ### Chrome HAR exports strip cookies (do not use HAR files for init)
 
