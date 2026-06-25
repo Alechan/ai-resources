@@ -8,13 +8,12 @@ Most commands are read-only; notebook create/update commands perform explicit us
 
 1. Install: `go install ./cmd/ddctl` (from `tools/ddctl/src`)
 2. Get cURL from Chrome DevTools:
-   - Log in to https://app.datadoghq.com/logs
-   - Open DevTools → Network tab
+   - Log in to https://app.datadoghq.com/logs (Logs Explorer)
+   - Open DevTools (Cmd+Option+I) → Network tab
    - Find a POST request to `/api/v1/logs-analytics/list`
-   - Right-click → Copy as cURL
-3. Save to file and initialize: `ddctl init --curl-file ~/curl.txt`
-4. Run `ddctl doctor`
-5. Try a query: `ddctl logs-query --query "service:my-svc"`
+   - Right-click → Copy → Copy as cURL
+3. Initialize (recommended): `pbpaste | ddctl init`
+4. Try a query: `ddctl logs-query --query "service:my-svc"`
 
 ## Build and Install
 
@@ -44,26 +43,25 @@ ddctl --help
 
 ## Workflow
 
-### Initialization: File-based (Recommended)
+### Initialization: Clipboard Pipe (Recommended)
 
-The simplest approach: save the cURL command to a file, then initialize:
+The simplest approach: copy the cURL from DevTools directly to Keychain.
 
 ```bash
 # 1. Open Chrome and log in to https://app.datadoghq.com/logs (Logs Explorer)
 # 2. Open DevTools (Cmd+Option+I) → Network tab
 # 3. Find a POST request to /api/v1/logs-analytics/list
-# 4. Right-click the request → Copy → Copy as cURL
-# 5. Paste into a file (e.g., ~/curl.txt)
-# 6. Run:
-ddctl init --curl-file ~/curl.txt
+# 4. Right-click → Copy → Copy as cURL
+# 5. Run:
+pbpaste | ddctl init
 ```
 
-### Initialization: Pipe from clipboard
+### Initialization: File-based (Alternative)
 
-Alternatively, pipe the cURL directly from your clipboard:
+If you prefer to save the cURL to a file first:
 
 ```bash
-pbpaste | ddctl init
+ddctl init --curl-file ~/curl.txt
 ```
 
 ### Clear credentials
@@ -74,11 +72,11 @@ ddctl init --clear
 
 ## Design decisions
 
-### Why file-based initialization
+### Why clipboard pipe
 
-Terminal pasting has a fundamental limitation: most terminals buffer a single pasted line to ~4096 bytes. DataDog cURL commands (especially with large cookie jars) often exceed this. `ddctl init --curl-file` avoids this by reading from a file instead of stdin.
+Terminal pasting has a fundamental limitation: most terminals buffer a single pasted line to ~4096 bytes. DataDog cURL commands (especially with large cookie jars) often exceed this. By reading from macOS clipboard directly (`pbpaste`), we bypass the terminal buffer entirely—no truncation, instant parsing, and simpler UX.
 
-The file can contain a cURL command in any format — single line, multi-line, with or without line continuations. The parser extracts the cookies and CSRF token automatically.
+If the file approach is preferred, `--curl-file` is available as an alternative.
 
 ### Why macOS Keychain, not a config file
 
@@ -128,11 +126,11 @@ Global flags:
 Store DataDog session cookies in the macOS Keychain by parsing a cURL command.
 
 ```bash
-# From file (recommended)
-ddctl init --curl-file ~/curl.txt
-
-# From clipboard
+# From clipboard (recommended)
 pbpaste | ddctl init
+
+# From file
+ddctl init --curl-file ~/curl.txt
 
 # Clear stored credentials
 ddctl init --clear
@@ -143,7 +141,7 @@ ddctl init --clear
 2. Open DevTools (Cmd+Option+I) → Network tab
 3. Find a **POST** request to `/api/v1/logs-analytics/list`
 4. Right-click → **Copy** → **Copy as cURL**
-5. Save to file or paste directly: `ddctl init --curl-file ~/curl.txt` or `pbpaste | ddctl init`
+5. Run: `pbpaste | ddctl init` (or: `ddctl init --curl-file ~/curl.txt`)
 
 `init` will:
 1. Parse the cURL command to extract cookies and CSRF token
@@ -280,10 +278,9 @@ Notes:
 
 ## Troubleshooting
 
-- **Credentials not found**: run `ddctl init --curl-file ~/curl.txt` with a fresh cURL from the Logs Explorer.
-- **Auth failures (HTTP 401/403)**: your session has expired; re-run `ddctl init --curl-file ~/curl.txt` with a fresh cURL from the Logs Explorer.
-- **cURL file not found**: ensure the file path is correct and readable.
-- **Parse error**: ensure the cURL command includes a `-b` or `Cookie:` header with session cookies.
+- **Credentials not found**: run `pbpaste | ddctl init` with a fresh cURL from the Logs Explorer (copy to clipboard first).
+- **Auth failures (HTTP 401/403)**: your session has expired; re-run `pbpaste | ddctl init` with a fresh cURL from the Logs Explorer.
+- **Parse error**: ensure the cURL command includes a `-b` or `Cookie:` header with session cookies, or use `--curl-file` if pasting fails.
 - **Missing CSRF token**: the cURL must include an `-H 'x-csrf-token: ...'` header; use the Logs Explorer (not Settings) to capture it.
 - **events-list returns 401**: the `/api/v1/events` endpoint may not accept session-cookie auth on your DataDog instance; report the issue.
 - **Template endpoint 404**: `GET /api/v1/notebooks/template/{id}` may return 404. Clone the template in UI first, then use the cloned notebook ID.
