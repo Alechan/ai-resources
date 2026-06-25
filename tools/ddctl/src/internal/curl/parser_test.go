@@ -75,3 +75,21 @@ func TestExtractCookieHeader_LongHeader(t *testing.T) {
 		t.Errorf("got %q, expected to contain DD_S=abc", got)
 	}
 }
+
+func TestExtractCookieHeader_SingleQuotedWithJSON(t *testing.T) {
+	// Test that the regex respects quote type (bug fix for tcm={"..."}  inside single quotes)
+	curlCmd := `curl 'https://app.datadoghq.com/api/v1/validate' \
+  -b 'dogweb=abc123; tcm={"bar":"baz"}; _dd_s_v2=xyz789'`
+
+	got, err := curl.ExtractCookieHeader(curlCmd)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Should capture the full cookie including JSON-like content
+	if !strings.Contains(got, "dogweb=abc123") {
+		t.Errorf("got %q, expected to contain dogweb=abc123", got)
+	}
+	if !strings.Contains(got, "tcm={") {
+		t.Errorf("got %q, expected JSON in tcm cookie", got)
+	}
+}

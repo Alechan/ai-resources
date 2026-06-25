@@ -54,7 +54,7 @@ func (s *DoctorService) Run(ctx context.Context) (DoctorReport, error) {
 		if err := s.runAuthQuery(ctx); err == nil {
 			r.AuthQueryValid = true
 		} else {
-			r.Note = `auth query failed; cookies may be stale, run "ddctl init --curl '<fresh cURL>'"`
+			r.Note = `auth query failed; cookies may be stale, run "ddctl init" and paste a fresh cURL`
 		}
 	}
 

@@ -1,6 +1,11 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
+
+// ── sanitizeCookieString ──────────────────────────────────────────────────
 
 func TestSanitizeCookieString_DropsInvalidFragments(t *testing.T) {
 	t.Parallel()
@@ -16,6 +21,25 @@ func TestSanitizeCookieString_DropsInvalidFragments(t *testing.T) {
 	}
 }
 
+func TestSanitizeCookieString_KeepsValidCookies(t *testing.T) {
+	t.Parallel()
+
+	in := "dogweb=abc123; _dd_s_v2=xyz789; dd_csrf_token=token"
+	got, dropped := sanitizeCookieString(in)
+
+	if !strings.Contains(got, "dogweb=abc123") {
+		t.Fatalf("sanitizeCookieString() missing dogweb: %q", got)
+	}
+	if !strings.Contains(got, "_dd_s_v2=xyz789") {
+		t.Fatalf("sanitizeCookieString() missing _dd_s_v2: %q", got)
+	}
+	if len(dropped) > 0 {
+		t.Fatalf("sanitizeCookieString() unexpectedly dropped: %v", dropped)
+	}
+}
+
+// ── validateInitAuthMaterial ──────────────────────────────────────────────
+
 func TestValidateInitAuthMaterial_RequiresCSRFAndSessionCookie(t *testing.T) {
 	t.Parallel()
 
@@ -24,26 +48,12 @@ func TestValidateInitAuthMaterial_RequiresCSRFAndSessionCookie(t *testing.T) {
 		cookieStr string
 		wantOK    bool
 	}{
-		{
-			name:      "valid with csrf and dogweb",
-			cookieStr: "dogweb=abc; dd_csrf_token=token",
-			wantOK:    true,
-		},
-		{
-			name:      "missing csrf",
-			cookieStr: "dogweb=abc",
-			wantOK:    false,
-		},
-		{
-			name:      "missing session cookie",
-			cookieStr: "dd_csrf_token=token",
-			wantOK:    false,
-		},
-		{
-			name:      "valid with csrf and _dd_s_v2",
-			cookieStr: "_dd_s_v2=abc; dd_csrf_token=token",
-			wantOK:    true,
-		},
+		{"valid with csrf and dogweb", "dogweb=abc; dd_csrf_token=token", true},
+		{"missing csrf", "dogweb=abc", false},
+		{"missing session cookie", "dd_csrf_token=token", false},
+		{"valid with csrf and _dd_s_v2", "_dd_s_v2=abc; dd_csrf_token=token", true},
+		{"valid with dogwebu", "dogwebu=abc; dd_csrf_token=token", true},
+		{"valid with _csrf alias", "dogweb=abc; _csrf=token", true},
 	}
 
 	for _, tc := range tests {

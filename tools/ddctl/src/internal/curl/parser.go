@@ -11,8 +11,9 @@ import (
 var cookieHeaderRe = regexp.MustCompile(`(?i)(?:-H|--header)\s+['"]Cookie:\s*([^'"]+)['"]`)
 
 // cookieFlagRe matches -b '...' or --cookie '...' (the curl cookie flag),
-// capturing the cookie string value.
-var cookieFlagRe = regexp.MustCompile(`(?:-b|--cookie)\s+['"]([^'"]+)['"]`)
+// capturing the cookie string value. Matches either single or double quotes,
+// respecting the quote type (so JSON inside quotes doesn't break parsing).
+var cookieFlagRe = regexp.MustCompile(`(?:-b|--cookie)\s+(?:'([^']*)'|"([^"]*)")`)
 
 // csrfHeaderRe matches -H 'x-csrf-token: <value>' (case-insensitive header name).
 var csrfHeaderRe = regexp.MustCompile(`(?i)(?:-H|--header)\s+['"]x-csrf-token:\s*([^'"]+)['"]`)
@@ -28,7 +29,14 @@ func ExtractCookieHeader(curlCmd string) (string, error) {
 		return strings.TrimSpace(match[1]), nil
 	}
 	if match := cookieFlagRe.FindStringSubmatch(normalized); match != nil {
-		return strings.TrimSpace(match[1]), nil
+		// cookieFlagRe has two groups: group 1 for single-quoted, group 2 for double-quoted
+		// One will be empty, the other will have the value
+		if match[1] != "" {
+			return strings.TrimSpace(match[1]), nil
+		}
+		if match[2] != "" {
+			return strings.TrimSpace(match[2]), nil
+		}
 	}
 	return "", fmt.Errorf("no Cookie header or -b flag found in cURL command")
 }

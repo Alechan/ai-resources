@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"sort"
 	"strings"
 
@@ -14,17 +15,33 @@ import (
 	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/fail"
 )
 
-func runInitCmd(_ context.Context, svcs app.Services, cfg app.Config, args []string, stdout, stderr io.Writer) int {
+const initDocumentation = `To initialize ddctl with credentials from Chrome DevTools:
+
+1. Open Chrome and log in to https://app.datadoghq.com/logs (Logs Explorer)
+2. Open DevTools: Cmd+Option+I → Network tab
+3. Find a POST request to /api/v1/logs-analytics/list
+4. Click the request → Headers tab → Request Headers section
+5. Copy the full cURL command from the request (right-click → Copy as cURL)
+6. Save the cURL command to a file (e.g., ~/curl.txt)
+7. Run: ddctl init --curl-file ~/curl.txt
+
+Or pipe directly:
+   pbpaste | ddctl init
+
+For more info:
+   https://docs.datadoghq.com/api/latest/
+
+`
+
+func runInitCmd(ctx context.Context, svcs app.Services, cfg app.Config, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 
-	curlVal := fs.String("curl", "", "cURL command copied from Chrome DevTools")
-	cookieVal := fs.String("cookie", "", "raw Cookie header value")
-	csrfVal := fs.String("csrf-token", "", "x-csrf-token value (extracted from cURL automatically if --curl is used)")
 	clear := fs.Bool("clear", false, "delete stored credentials and exit")
+	curlFile := fs.String("curl-file", "", "path to file containing cURL command")
 
 	if err := fs.Parse(args); err != nil {
-		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl init [--curl <cmd>] [--cookie <str>] [--clear]"))
+		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl init [--clear | --curl-file PATH]"))
 		return fail.CodeValidation
 	}
 
@@ -37,52 +54,72 @@ func runInitCmd(_ context.Context, svcs app.Services, cfg app.Config, args []str
 		return fail.CodeOK
 	}
 
-	if *curlVal == "" && *cookieVal == "" {
-		writeError(stderr, fail.NewValidation("must provide --curl or --cookie", "usage: ddctl init --curl '<paste cURL here>'"))
+	if *curlFile == "" {
+		// No flag provided; try reading from stdin
+		return initFromStdin(ctx, svcs, cfg, os.Stdin, stdout, stderr)
+	}
+
+	// Read cURL from file
+	curlData, err := os.ReadFile(*curlFile)
+	if err != nil {
+		writeError(stderr, fail.NewValidation(err.Error(), "ensure file exists and is readable"))
 		return fail.CodeValidation
 	}
-	if *curlVal != "" && *cookieVal != "" {
-		writeError(stderr, fail.NewValidation("--curl and --cookie are mutually exclusive", "provide only one"))
+
+	curlCmd := string(curlData)
+	return initFromCurl(ctx, svcs, cfg, curlCmd, stdout, stderr)
+}
+
+// initFromStdin reads cURL from stdin and processes it.
+func initFromStdin(ctx context.Context, svcs app.Services, cfg app.Config, stdin io.Reader, stdout, stderr io.Writer) int {
+	data, err := io.ReadAll(stdin)
+	if err != nil {
+		writeError(stderr, fail.NewValidation(err.Error(), "unable to read stdin"))
 		return fail.CodeValidation
 	}
 
-	cookieStr := *cookieVal
-	if *curlVal != "" {
-		var err error
-		cookieStr, err = curl.ExtractCookieHeader(*curlVal)
-		if err != nil {
-			writeError(stderr, fail.NewValidation(err.Error(), "ensure the cURL command includes a Cookie header"))
-			return fail.CodeValidation
-		}
-		// Auto-extract CSRF token from x-csrf-token header if not explicitly provided.
-		if *csrfVal == "" {
-			*csrfVal = curl.ExtractCSRFToken(*curlVal)
-		}
+	curlCmd := string(data)
+	if strings.TrimSpace(curlCmd) == "" {
+		fmt.Fprint(stdout, initDocumentation)
+		return fail.CodeOK
 	}
 
-	// Append CSRF token as synthetic dd_csrf_token cookie so the API client can inject it.
-	if *csrfVal != "" {
-		cookieStr = cookieStr + "; dd_csrf_token=" + *csrfVal
+	return initFromCurl(ctx, svcs, cfg, curlCmd, stdout, stderr)
+}
+
+// initFromCurl extracts credentials from a cURL command and stores them.
+func initFromCurl(ctx context.Context, svcs app.Services, cfg app.Config, curlCmd string, stdout, stderr io.Writer) int {
+	// Extract cookie and CSRF token from cURL
+	cookieStr, err := curl.ExtractCookieHeader(curlCmd)
+	if err != nil {
+		writeError(stderr, fail.NewValidation(err.Error(), "ensure the cURL command includes a Cookie header or -b flag"))
+		return fail.CodeValidation
 	}
 
-	sanitizedCookieStr, dropped := sanitizeCookieString(cookieStr)
+	csrfToken := curl.ExtractCSRFToken(curlCmd)
+
+	if csrfToken != "" {
+		cookieStr = cookieStr + "; dd_csrf_token=" + csrfToken
+	}
+
+	// Sanitize and validate
+	sanitized, dropped := sanitizeCookieString(cookieStr)
 	if len(dropped) > 0 {
 		fmt.Fprintf(stderr, "warning: dropped invalid cookies: %s\n", strings.Join(dropped, ", "))
 	}
-	if err := validateInitAuthMaterial(sanitizedCookieStr); err != nil {
-		writeError(stderr, fail.NewValidation(
-			err.Error(),
-			`provide a CSRF token and at least one of dogweb/dogwebu/_dd_s_v2 (try "ddctl init --curl '<fresh cURL>'")`,
-		))
+
+	if err := validateInitAuthMaterial(sanitized); err != nil {
+		writeError(stderr, fail.NewValidation(err.Error(), "provide a fresh cURL command from Chrome DevTools"))
 		return fail.CodeValidation
 	}
 
-	if err := svcs.Auth.Store(sanitizedCookieStr); err != nil {
+	// Store credentials
+	if err := svcs.Auth.Store(sanitized); err != nil {
 		writeError(stderr, fail.NewAuth(err.Error(), "ensure you have access to the macOS Keychain"))
 		return fail.CodeAuth
 	}
 
-	// Count cookies by loading them back via the same parser.
+	// Show stored count and run doctor
 	cookies, err := svcs.Auth.Cookies()
 	if err != nil {
 		writeError(stderr, fail.NewAuth(err.Error(), ""))
@@ -96,16 +133,16 @@ func runInitCmd(_ context.Context, svcs app.Services, cfg app.Config, args []str
 			CookiesStored int    `json:"cookies_stored"`
 		}{Site: cfg.Site, CookiesStored: count}
 		enc := json.NewEncoder(stdout)
-		if err := enc.Encode(out); err != nil {
-			writeError(stderr, fail.NewAPI(err.Error(), "unable to encode init result", ""))
+		if encErr := enc.Encode(out); encErr != nil {
+			writeError(stderr, fail.NewAPI(encErr.Error(), "unable to encode init result", ""))
 			return fail.CodeAPI
 		}
 		return fail.CodeOK
 	}
 
-	fmt.Fprintf(stdout, "stored %d cookies for %s\n", count, cfg.Site)
-	fmt.Fprintln(stdout, `run "ddctl doctor" to verify connectivity`)
-	return fail.CodeOK
+	fmt.Fprintf(stdout, "\nstored %d cookies for %s\n", count, cfg.Site)
+	fmt.Fprintln(stdout, "verifying credentials…")
+	return runDoctorCmd(ctx, svcs, cfg, nil, stdout, stderr)
 }
 
 func sanitizeCookieString(cookieStr string) (string, []string) {
