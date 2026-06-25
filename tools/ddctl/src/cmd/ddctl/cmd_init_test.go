@@ -1,8 +1,14 @@
 package main
 
 import (
+	"bytes"
+	"context"
+	"io"
 	"strings"
 	"testing"
+
+	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/app"
+	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/fail"
 )
 
 // ── sanitizeCookieString ──────────────────────────────────────────────────
@@ -68,5 +74,31 @@ func TestValidateInitAuthMaterial_RequiresCSRFAndSessionCookie(t *testing.T) {
 				t.Fatalf("validateInitAuthMaterial() error = nil, want non-nil")
 			}
 		})
+	}
+}
+
+func TestInitFromStdinWithDetector_ShowsHelpOnTerminal(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := initFromStdinWithDetector(
+		context.Background(),
+		app.Services{},
+		app.Config{},
+		strings.NewReader(""),
+		&stdout,
+		&stderr,
+		func(io.Reader) bool { return true },
+	)
+
+	if code != fail.CodeOK {
+		t.Fatalf("initFromStdinWithDetector() code = %d, want %d", code, fail.CodeOK)
+	}
+	if !strings.Contains(stdout.String(), "Run: pbpaste | ddctl init") {
+		t.Fatalf("stdout = %q, want init documentation", stdout.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
 	}
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/app"
 	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/curl"
 	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/fail"
+	"golang.org/x/term"
 )
 
 const initDocumentation = `To initialize ddctl with credentials from Chrome DevTools:
@@ -20,13 +21,13 @@ const initDocumentation = `To initialize ddctl with credentials from Chrome DevT
 1. Open Chrome and log in to https://app.datadoghq.com/logs (Logs Explorer)
 2. Open DevTools: Cmd+Option+I → Network tab
 3. Find a POST request to /api/v1/logs-analytics/list
-4. Click the request → Headers tab → Request Headers section
-5. Copy the full cURL command from the request (right-click → Copy as cURL)
-6. Save the cURL command to a file (e.g., ~/curl.txt)
-7. Run: ddctl init --curl-file ~/curl.txt
+4. Right-click → Copy → Copy as cURL
+5. Run: pbpaste | ddctl init
 
-Or pipe directly:
-   pbpaste | ddctl init
+(Recommended: pbpaste pipes directly from clipboard, avoiding paste truncation)
+
+Alternative: Save to file and run:
+   ddctl init --curl-file ~/curl.txt
 
 For more info:
    https://docs.datadoghq.com/api/latest/
@@ -41,7 +42,7 @@ func runInitCmd(ctx context.Context, svcs app.Services, cfg app.Config, args []s
 	curlFile := fs.String("curl-file", "", "path to file containing cURL command")
 
 	if err := fs.Parse(args); err != nil {
-		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl init [--clear | --curl-file PATH]"))
+		writeError(stderr, fail.NewValidation(err.Error(), "usage: pbpaste | ddctl init   (or: ddctl init --curl-file PATH, or: ddctl init --clear)"))
 		return fail.CodeValidation
 	}
 
@@ -72,6 +73,15 @@ func runInitCmd(ctx context.Context, svcs app.Services, cfg app.Config, args []s
 
 // initFromStdin reads cURL from stdin and processes it.
 func initFromStdin(ctx context.Context, svcs app.Services, cfg app.Config, stdin io.Reader, stdout, stderr io.Writer) int {
+	return initFromStdinWithDetector(ctx, svcs, cfg, stdin, stdout, stderr, isTerminalInput)
+}
+
+func initFromStdinWithDetector(ctx context.Context, svcs app.Services, cfg app.Config, stdin io.Reader, stdout, stderr io.Writer, isTerminal func(io.Reader) bool) int {
+	if isTerminal(stdin) {
+		fmt.Fprint(stdout, initDocumentation)
+		return fail.CodeOK
+	}
+
 	data, err := io.ReadAll(stdin)
 	if err != nil {
 		writeError(stderr, fail.NewValidation(err.Error(), "unable to read stdin"))
@@ -85,6 +95,14 @@ func initFromStdin(ctx context.Context, svcs app.Services, cfg app.Config, stdin
 	}
 
 	return initFromCurl(ctx, svcs, cfg, curlCmd, stdout, stderr)
+}
+
+func isTerminalInput(stdin io.Reader) bool {
+	file, ok := stdin.(*os.File)
+	if !ok {
+		return false
+	}
+	return term.IsTerminal(int(file.Fd()))
 }
 
 // initFromCurl extracts credentials from a cURL command and stores them.
