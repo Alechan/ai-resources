@@ -210,14 +210,16 @@ ddctl monitors-get 12345678 --json
 
 ### events-list
 
-List DataDog events in a time range.
+List DataDog events in a time range. Uses the same browser endpoint as logs-query
+(`/api/v1/logs-analytics/list?type=feed`), so it works with session-cookie auth.
 
 ```bash
 ddctl events-list --from now-2h
 ddctl events-list --from now-4h --tags env:prod --json
+ddctl events-list --from now-1h --sources containerd,kubernetes --limit 20
+ddctl events-list --from now-1h --count-only --json
+ddctl events-list --cursor '<next_cursor value>'
 ```
-
-> **Note**: `events-list` uses `/api/v1/events` which may return HTTP 401 depending on your DataDog configuration. If this happens, report it — the browser may use a different internal endpoint.
 
 ### metrics-query
 
@@ -282,7 +284,6 @@ Notes:
 - **Auth failures (HTTP 401/403)**: your session has expired; re-run `pbpaste | ddctl init` with a fresh cURL from the Logs Explorer.
 - **Parse error**: ensure the cURL command includes a `-b` or `Cookie:` header with session cookies, or use `--curl-file` if pasting fails.
 - **Missing CSRF token**: the cURL must include an `-H 'x-csrf-token: ...'` header; use the Logs Explorer (not Settings) to capture it.
-- **events-list returns 401**: the `/api/v1/events` endpoint may not accept session-cookie auth on your DataDog instance; report the issue.
 - **Template endpoint 404**: `GET /api/v1/notebooks/template/{id}` may return 404. Clone the template in UI first, then use the cloned notebook ID.
 - **Blank notebook charts**: preflight timeseries with `ddctl notebooks validate` or `ddctl metrics-query` before writing.
 - **SQS metric with no data**: avoid `kube_namespace` filters on `aws.sqs.*`; scope by `queuename` tags.

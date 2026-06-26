@@ -139,10 +139,13 @@ Output format (text): `[id] state    type     name    tags:…`
 ```
 ddctl events-list --from now-2h
 ddctl events-list --from now-4h --tags env:prod
+ddctl events-list --from now-1h --sources containerd,kubernetes --limit 20
+ddctl events-list --from now-1h --count-only --json
+ddctl events-list --cursor '<next_cursor value>'
 ```
 
-> **Note**: `events-list` uses `/api/v1/events`. If this returns HTTP 401, the DataDog
-> instance may require a different endpoint for events. Report the error and we will investigate.
+Uses the same browser endpoint as logs-query (`/api/v1/logs-analytics/list?type=feed`),
+so it works with session-cookie auth. Supports `--limit`, `--cursor`, and `--count-only`.
 
 ### Step 7 — Query metrics
 
@@ -200,7 +203,7 @@ Timeseries query caveats:
 - `ddctl logs-query --query "*" --limit 1` returns at least one log event or empty result without error.
 - `ddctl logs-query --count-only --query "*" --from now-1h --json` returns metadata with `hit_count`.
 - `ddctl monitors-list` returns a list of monitors (even if empty).
-- `ddctl events-list --from now-2h` returns events or empty; HTTP 401 = endpoint needs investigation.
+- `ddctl events-list --from now-2h` returns events or empty without error.
 - `ddctl metrics-query --query "avg:system.cpu.user{*}" --from now-1h` returns series or "no data".
 - `ddctl notebooks get <id>` returns notebook details without error.
 - `ddctl notebooks validate --from-file <file>` reports timeseries queries and catches empty-series risks.
