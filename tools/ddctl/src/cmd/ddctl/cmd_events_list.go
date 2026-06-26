@@ -21,6 +21,9 @@ func runEventsListCmd(ctx context.Context, svcs app.Services, cfg app.Config, ar
 	to := fs.String("to", "now", "end time (relative or ISO-8601)")
 	sources := fs.String("sources", "", "filter by comma-separated event sources")
 	tags := fs.String("tags", "", "filter by comma-separated tags (e.g. env:prod,service:api)")
+	limit := fs.Int("limit", 50, "max events to return")
+	cursor := fs.String("cursor", "", "pagination cursor from a previous result")
+	countOnly := fs.Bool("count-only", false, "return only the hit count, no event data")
 
 	if err := fs.Parse(args); err != nil {
 		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl events-list [flags]"))
@@ -28,10 +31,13 @@ func runEventsListCmd(ctx context.Context, svcs app.Services, cfg app.Config, ar
 	}
 
 	input := service.EventsListInput{
-		From:    *from,
-		To:      *to,
-		Sources: *sources,
-		Tags:    *tags,
+		From:      *from,
+		To:        *to,
+		Sources:   *sources,
+		Tags:      *tags,
+		Limit:     *limit,
+		Cursor:    *cursor,
+		CountOnly: *countOnly,
 	}
 
 	result, err := svcs.EventsList.Run(ctx, input)
@@ -48,15 +54,28 @@ func runEventsListCmd(ctx context.Context, svcs app.Services, cfg app.Config, ar
 		return fail.CodeOK
 	}
 
+	if *countOnly {
+		fmt.Fprintf(stdout, "hit_count: %d\n", result.HitCount)
+		return fail.CodeOK
+	}
+
 	for _, ev := range result.Events {
-		ts := time.Unix(ev.DateHappened, 0).UTC().Format(time.RFC3339)
-		title := ev.Title
-		alert := ev.AlertType
+		ts := time.UnixMilli(ev.Timestamp).UTC().Format(time.RFC3339)
+		alert := ev.Status
 		if alert == "" {
-			alert = ev.Priority
+			alert = ev.AlertType
+		}
+		title := ev.Title
+		if title == "" {
+			title = ev.Text
 		}
 		tags := strings.Join(ev.Tags, ",")
 		fmt.Fprintf(stdout, "%s [%s] %s  %s\n", ts, alert, title, tags)
 	}
+
+	if result.NextCursor != "" {
+		fmt.Fprintf(stdout, "\nnext_cursor: %s\n", result.NextCursor)
+	}
+
 	return fail.CodeOK
 }
