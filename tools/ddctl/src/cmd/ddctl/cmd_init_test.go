@@ -77,6 +77,8 @@ func TestValidateInitAuthMaterial_RequiresCSRFAndSessionCookie(t *testing.T) {
 	}
 }
 
+// ── initFromStdinWithDetector ─────────────────────────────────────────────
+
 func TestInitFromStdinWithDetector_ShowsHelpOnTerminal(t *testing.T) {
 	t.Parallel()
 
@@ -93,12 +95,147 @@ func TestInitFromStdinWithDetector_ShowsHelpOnTerminal(t *testing.T) {
 	)
 
 	if code != fail.CodeOK {
-		t.Fatalf("initFromStdinWithDetector() code = %d, want %d", code, fail.CodeOK)
+		t.Fatalf("code = %d, want %d", code, fail.CodeOK)
 	}
-	if !strings.Contains(stdout.String(), "Run: pbpaste | ddctl init") {
+	if !strings.Contains(stdout.String(), "pbpaste | ddctl init") {
 		t.Fatalf("stdout = %q, want init documentation", stdout.String())
 	}
 	if stderr.Len() != 0 {
 		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+}
+
+func TestInitFromStdinWithDetector_ShowsHelpOnEmptyPipedInput(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := initFromStdinWithDetector(
+		context.Background(),
+		app.Services{},
+		app.Config{},
+		strings.NewReader(""),
+		&stdout,
+		&stderr,
+		func(io.Reader) bool { return false }, // not a terminal
+	)
+
+	if code != fail.CodeOK {
+		t.Fatalf("code = %d, want %d", code, fail.CodeOK)
+	}
+	if !strings.Contains(stdout.String(), "pbpaste | ddctl init") {
+		t.Fatalf("stdout = %q, want init documentation on empty pipe", stdout.String())
+	}
+}
+
+func TestInitFromStdinWithDetector_ShowsHelpOnWhitespaceOnlyInput(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := initFromStdinWithDetector(
+		context.Background(),
+		app.Services{},
+		app.Config{},
+		strings.NewReader("   \n\t\n  "),
+		&stdout,
+		&stderr,
+		func(io.Reader) bool { return false },
+	)
+
+	if code != fail.CodeOK {
+		t.Fatalf("code = %d, want %d", code, fail.CodeOK)
+	}
+	if !strings.Contains(stdout.String(), "pbpaste | ddctl init") {
+		t.Fatalf("stdout = %q, want init documentation on whitespace-only input", stdout.String())
+	}
+}
+
+func TestInitFromStdinWithDetector_FailsOnCurlMissingCookies(t *testing.T) {
+	t.Parallel()
+
+	// A cURL command with no -b or Cookie header → ExtractCookieHeader will fail.
+	curlNoCookies := `curl 'https://app.datadoghq.com/api/v1/logs-analytics/list' -X POST -H 'content-type: application/json'`
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := initFromStdinWithDetector(
+		context.Background(),
+		app.Services{},
+		app.Config{},
+		strings.NewReader(curlNoCookies),
+		&stdout,
+		&stderr,
+		func(io.Reader) bool { return false },
+	)
+
+	if code != fail.CodeValidation {
+		t.Fatalf("code = %d, want %d (validation error)", code, fail.CodeValidation)
+	}
+	if !strings.Contains(stderr.String(), "Cookie") {
+		t.Errorf("stderr = %q, want mention of missing Cookie header", stderr.String())
+	}
+}
+
+func TestInitFromStdinWithDetector_FailsOnMissingCSRFToken(t *testing.T) {
+	t.Parallel()
+
+	// cURL with a cookie header but no CSRF token and no dd_csrf_token cookie.
+	curlNoCSRF := `curl 'https://app.datadoghq.com/api/v1/logs-analytics/list' -b 'dogweb=abc123; _dd_s_v2=xyz'`
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := initFromStdinWithDetector(
+		context.Background(),
+		app.Services{},
+		app.Config{},
+		strings.NewReader(curlNoCSRF),
+		&stdout,
+		&stderr,
+		func(io.Reader) bool { return false },
+	)
+
+	if code != fail.CodeValidation {
+		t.Fatalf("code = %d, want %d (validation error for missing CSRF)", code, fail.CodeValidation)
+	}
+	if !strings.Contains(stderr.String(), "CSRF") {
+		t.Errorf("stderr = %q, want mention of missing CSRF token", stderr.String())
+	}
+}
+
+func TestInitFromStdinWithDetector_FailsOnMissingSessionCookie(t *testing.T) {
+	t.Parallel()
+
+	// Has CSRF token via -H header, but no session cookie (dogweb/dogwebu/_dd_s_v2).
+	curlNoSession := `curl 'https://app.datadoghq.com/api/v1/logs-analytics/list' -b 'random=value' -H 'x-csrf-token: tok123'`
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := initFromStdinWithDetector(
+		context.Background(),
+		app.Services{},
+		app.Config{},
+		strings.NewReader(curlNoSession),
+		&stdout,
+		&stderr,
+		func(io.Reader) bool { return false },
+	)
+
+	if code != fail.CodeValidation {
+		t.Fatalf("code = %d, want %d (validation error for missing session)", code, fail.CodeValidation)
+	}
+	if !strings.Contains(stderr.String(), "session") {
+		t.Errorf("stderr = %q, want mention of missing session cookie", stderr.String())
+	}
+}
+
+// ── isTerminalInput ──────────────────────────────────────────────────────
+
+func TestIsTerminalInput_ReturnsFalseForNonFileReader(t *testing.T) {
+	t.Parallel()
+
+	// A strings.Reader is not an *os.File, so should return false.
+	if isTerminalInput(strings.NewReader("hello")) {
+		t.Fatal("isTerminalInput(strings.Reader) = true, want false")
 	}
 }
