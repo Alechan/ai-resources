@@ -17,21 +17,14 @@ import (
 )
 
 const initDocumentation = `To initialize ddctl with credentials from Chrome DevTools:
-
-1. Open Chrome and log in to https://app.datadoghq.com/logs (Logs Explorer)
+1. Open Chrome: https://app.datadoghq.com/logs
 2. Open DevTools: Cmd+Option+I → Network tab
-3. Find a POST request to /api/v1/logs-analytics/list
+3. Find POST /api/v1/logs-analytics/list
 4. Right-click → Copy → Copy as cURL
-5. Run: pbpaste | ddctl init
-
-(Recommended: pbpaste pipes directly from clipboard, avoiding paste truncation)
-
-Alternative: Save to file and run:
+5. Run:
+  - pbpaste | ddctl init
+  - Alternative: Save to file and run:
    ddctl init --curl-file ~/curl.txt
-
-For more info:
-   https://docs.datadoghq.com/api/latest/
-
 `
 
 func runInitCmd(ctx context.Context, svcs app.Services, cfg app.Config, args []string, stdout, stderr io.Writer) int {
