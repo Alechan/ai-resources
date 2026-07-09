@@ -42,6 +42,7 @@ Where:
 6. Clarify flatten operations explicitly:
    - **Recursive flatten:** move all nested files to root.
    - **One-level collapse:** move only immediate children of first-level directories.
+7. If running inside a Copilot-managed session that forces a different worktree root, keep the canonical worktree in `~/mytheresa_repos/<repo>/...` and create a symlink from the forced location to the canonical location.
 
 ---
 
@@ -81,3 +82,20 @@ append_ignore 'wt-shared'
 ## Notes
 
 Org-specific path conventions (for example Mytheresa local clone roots) should be documented in the org/environment skill and can reference this skill for the generic pattern.
+
+### Copilot-managed workspace fallback (Mytheresa)
+
+When the app forces a workspace under `.copilot/copilot-worktrees/...`, do not treat that as the source of truth for local worktree layout.
+
+Use `~/mytheresa_repos/<repo>` as canonical and link the forced path to it:
+
+```bash
+CANONICAL="${HOME}/mytheresa_repos/<repo>"
+FORCED_ROOT="<copilot-forced-workspace-root>"
+
+# Example: link a branch worktree path from forced root to canonical root
+ln -sfn "${CANONICAL}/<branch-name>" "${FORCED_ROOT}/<branch-name>"
+
+# Keep shared folder visible from the forced path too
+ln -sfn "${CANONICAL}/wt-shared" "${FORCED_ROOT}/wt-shared"
+```
