@@ -50,11 +50,13 @@ gdrivectl --help
 bash scripts/install_cursor_skill.sh
 ```
 
-4. Install git hooks from this repo:
+4. Install git hooks for this repo only:
 
 ```bash
 bash scripts/install_git_hooks.sh
 ```
+
+For global Co-authored-by stripping on all repos, use `~/dotfiles/git-strip-co-author` (see that repo's README).
 
 5. Install a Codex skill from this repo:
 
