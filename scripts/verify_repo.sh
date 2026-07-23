@@ -84,6 +84,7 @@ required_files=(
   "tools/ddctl/src/cmd/ddctl/main.go"
   "playbooks/datagrip-datasource-update.md"
   "scripts/install_codex_skill.sh"
+  "scripts/install_cursor_skill.sh"
   "scripts/install_claude_agent.sh"
   "scripts/install_claude_statusline.sh"
   "scripts/lint_shell.sh"
@@ -118,6 +119,7 @@ for agent_file in "$repo_root"/agents/*.md; do
 done
 
 check_executable "scripts/install_codex_skill.sh"
+check_executable "scripts/install_cursor_skill.sh"
 check_executable "scripts/install_claude_agent.sh"
 check_executable "scripts/install_claude_statusline.sh"
 check_executable "scripts/lint_shell.sh"

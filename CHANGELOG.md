@@ -4,6 +4,7 @@
 
 ### Added
 
+- `scripts/install_cursor_skill.sh`: install skills into `~/.cursor/skills/` via symlinks
 - `ddctl` tool: unofficial DataDog CLI — added `metrics-query` (Phase 5)
 - `ddctl logs-query`: pagination via `--cursor` and `--all` flags; `next_cursor` printed in text output
 - `ddctl monitors-list`: list all monitors with optional `--tag` filter

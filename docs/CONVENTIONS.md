@@ -38,6 +38,7 @@ Every agent file in `agents/` must include:
 ## Install Path Conventions
 
 - Codex skill target path: `~/.codex/skills/<skill-name>/SKILL.md`
+- Cursor skill target path: `~/.cursor/skills/<skill-name>/`
 - Claude agent target path: `~/.claude/agents/<agent-name>.md`
 - Installers should default to symlink mode for easier updates from this repository.
 

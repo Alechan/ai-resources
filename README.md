@@ -44,13 +44,19 @@ go install github.com/Alechan/ai-resources/tools/gdrivectl/src/cmd/gdrivectl@lat
 gdrivectl --help
 ```
 
-3. Install a Codex skill from this repo:
+3. Install skills for Cursor from this repo:
+
+```bash
+bash scripts/install_cursor_skill.sh
+```
+
+4. Install a Codex skill from this repo:
 
 ```bash
 bash scripts/install_codex_skill.sh gdrivectl-drive-ops skills/gdrivectl-drive-ops/SKILL.md
 ```
 
-4. Install a Claude agent from this repo:
+5. Install a Claude agent from this repo:
 
 ```bash
 bash scripts/install_claude_agent.sh agents/gdrivectl-drive-ops.md gdrivectl-drive-ops
