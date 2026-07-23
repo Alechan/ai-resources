@@ -85,6 +85,8 @@ required_files=(
   "playbooks/datagrip-datasource-update.md"
   "scripts/install_codex_skill.sh"
   "scripts/install_cursor_skill.sh"
+  "scripts/install_git_hooks.sh"
+  "scripts/git-hooks/commit-msg"
   "scripts/install_claude_agent.sh"
   "scripts/install_claude_statusline.sh"
   "scripts/lint_shell.sh"
@@ -120,6 +122,8 @@ done
 
 check_executable "scripts/install_codex_skill.sh"
 check_executable "scripts/install_cursor_skill.sh"
+check_executable "scripts/install_git_hooks.sh"
+check_executable "scripts/git-hooks/commit-msg"
 check_executable "scripts/install_claude_agent.sh"
 check_executable "scripts/install_claude_statusline.sh"
 check_executable "scripts/lint_shell.sh"

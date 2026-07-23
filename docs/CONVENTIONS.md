@@ -39,6 +39,7 @@ Every agent file in `agents/` must include:
 
 - Codex skill target path: `~/.codex/skills/<skill-name>/SKILL.md`
 - Cursor skill target path: `~/.cursor/skills/<skill-name>/`
+- Git hooks: `bash scripts/install_git_hooks.sh` (symlinks `scripts/git-hooks/*` into `.git/hooks/`)
 - Claude agent target path: `~/.claude/agents/<agent-name>.md`
 - Installers should default to symlink mode for easier updates from this repository.
 

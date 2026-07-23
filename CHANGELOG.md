@@ -5,6 +5,7 @@
 ### Added
 
 - `scripts/install_cursor_skill.sh`: install skills into `~/.cursor/skills/` via symlinks
+- `scripts/install_git_hooks.sh`: install git hooks that strip Co-authored-by trailers
 - `ddctl` tool: unofficial DataDog CLI — added `metrics-query` (Phase 5)
 - `ddctl logs-query`: pagination via `--cursor` and `--all` flags; `next_cursor` printed in text output
 - `ddctl monitors-list`: list all monitors with optional `--tag` filter
