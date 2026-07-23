@@ -9,7 +9,7 @@
 #
 # Cursor reads skills from ~/.cursor/skills/<skill-name>/SKILL.md
 # Re-running is safe: existing skill directories or symlinks are replaced.
-# Skills are symlinked so edits in this repository take effect immediately.
+# Skills are symlinked so edits in source repositories take effect immediately.
 
 set -euo pipefail
 
@@ -47,9 +47,21 @@ install_all_skills() {
   echo "Installing skills to ${CURSOR_SKILLS_DIR}"
   echo ""
   mkdir -p "${CURSOR_SKILLS_DIR}"
+
+  echo "[ai-resources]"
   for d in "${AI_RESOURCES_SKILLS}"/*/; do
     [[ -f "${d}SKILL.md" ]] && install_skill_dir "${d%/}"
   done
+
+  MYT_ECOSYSTEM_SKILLS="${HOME}/src/mytheresa_ecosystem/skills"
+  if [[ -d "${MYT_ECOSYSTEM_SKILLS}" ]]; then
+    echo ""
+    echo "[mytheresa_ecosystem]"
+    for d in "${MYT_ECOSYSTEM_SKILLS}"/*/; do
+      [[ -f "${d}SKILL.md" ]] && install_skill_dir "${d%/}"
+    done
+  fi
+
   echo ""
   echo "Done."
   echo "Cursor skills: $(find "${CURSOR_SKILLS_DIR}" -maxdepth 1 \( -type d -o -type l \) | tail -n +2 | wc -l | tr -d ' ')"
