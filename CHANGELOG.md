@@ -4,6 +4,7 @@
 
 ### Added
 
+- `slackctl` tool and `slackctl-conversation-ops` skill for safe, resumable Slack conversation exports with raw, JSON, and Markdown output
 - `scripts/install_cursor_skill.sh`: install skills into `~/.cursor/skills/` via symlinks
 - `scripts/install_git_hooks.sh`: install git hooks that strip Co-authored-by trailers
 - `ddctl` tool: unofficial DataDog CLI — added `metrics-query` (Phase 5)

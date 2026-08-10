@@ -19,3 +19,5 @@
 | lint-before-push | skill | active | platform | `~/.codex/skills/lint-before-push/SKILL.md` | `bash scripts/verify_repo.sh` | this repo |
 | pr-qlty-triage | skill | active | platform | `~/.codex/skills/pr-qlty-triage/SKILL.md` | `bash scripts/verify_repo.sh` | this repo |
 | vis-network-diagrams | skill | active | platform | `~/.codex/skills/vis-network-diagrams/SKILL.md` | `bash scripts/verify_repo.sh` | this repo |
+| slackctl-conversation-ops | skill | active | platform | `~/.codex/skills/slackctl-conversation-ops/SKILL.md` | `bash scripts/verify_repo.sh` | this repo |
+| slackctl | tool | active | platform | `go install github.com/Alechan/ai-resources/tools/slackctl/src/cmd/slackctl@latest` | `cd tools/slackctl/src && go test ./...` | this repo |

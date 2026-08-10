@@ -47,6 +47,7 @@ Optional fields: `license`, `allowed-tools` (pre-approves shell tools — use wi
 | [`jenkinsctl`](./jenkinsctl/SKILL.md) | Interact with Jenkins instances using the jenkinsctl CLI |
 | [`lint-before-push`](./lint-before-push/SKILL.md) | Catch and fix lint issues before pushing a branch |
 | [`pr-qlty-triage`](./pr-qlty-triage/SKILL.md) | Triage qlty.sh code quality findings for a PR |
+| [`slackctl-conversation-ops`](./slackctl-conversation-ops/SKILL.md) | Safely export accessible Slack conversations with threads |
 
 Skills specific to the Mytheresa ecosystem live in the `mytheresa_ecosystem` repo under `skills/`.
 
