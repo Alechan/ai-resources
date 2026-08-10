@@ -51,8 +51,11 @@ authentication.
    For a bounded export, replace `--all` with `--from` and optionally `--to`.
    Resume an interrupted filesystem export with `--resume`.
 
-5. Read `manifest.json`. Verify `complete` is true, requested and exported
-   bounds are consistent, and root, reply, and participant counts are present.
+5. Read the flat schema-v1 `manifest.json`. Verify top-level `complete` is true;
+   compare `requested_from` and `requested_to` with `oldest_exported` and
+   `newest_exported`; and read `root_message_count`, `thread_reply_count`, and
+   `participant_count`. Do not query nested `requested`, `exported`, `counts`,
+   `warnings`, or `files` objects; schema version 1 does not define them.
 6. Report only output paths, counts, completeness, and warnings. Do not quote
    private message text.
 

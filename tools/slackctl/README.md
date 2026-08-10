@@ -118,12 +118,17 @@ raw_history/page_0001.json
 raw_threads/thread_100_000001_page_0001.json
 ```
 
-`manifest.json` records schema version 1, requested bounds, conversation type,
-counts, exported timestamp bounds, and completeness. The normalized JSON keeps
-only conversation identity, resolved participants, chronological messages, and
-nested chronological replies. Unknown Slack fields remain in immutable raw
-pages. Markdown preserves line breaks and renders Slack links and mentions
-without summarizing or interpreting content.
+`manifest.json` schema version 1 is flat. Read these top-level fields directly:
+`schema_version`, `workspace_host`, `workspace_id`, `conversation_id`,
+`conversation_type`, `exported_at`, `requested_from`, `requested_to`,
+`oldest_exported`, `newest_exported`, `root_message_count`,
+`thread_reply_count`, `participant_count`, and `complete`. It does not contain
+nested `requested`, `exported`, `counts`, `warnings`, or `files` objects.
+
+The normalized JSON keeps only conversation identity, resolved participants,
+chronological messages, and nested chronological replies. Unknown Slack fields
+remain in immutable raw pages. Markdown preserves line breaks and renders Slack
+links and mentions without summarizing or interpreting content.
 
 On completion, `slackctl` checks ordering, bounds, thread coverage, counts, and
 the output tree for exact credential values. Unsafe affected files are removed
