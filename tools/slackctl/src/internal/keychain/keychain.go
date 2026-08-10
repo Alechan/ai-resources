@@ -6,40 +6,60 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os/exec"
 
 	"github.com/Alechan/ai-resources/tools/slackctl/src/internal/auth"
+	nativekeychain "github.com/keybase/go-keychain"
 )
 
 const service = "slackctl"
 
-type Runner interface {
-	Run(context.Context, []byte, ...string) ([]byte, error)
+var ErrItemNotFound = errors.New("keychain item not found")
+
+type Backend interface {
+	Set(service, account string, data []byte) error
+	Get(service, account string) ([]byte, error)
+	Delete(service, account string) error
 }
 
-type commandRunner struct{}
+type nativeBackend struct{}
 
-func (commandRunner) Run(ctx context.Context, input []byte, args ...string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, "/usr/bin/security", args...)
-	cmd.Stdin = bytes.NewReader(input)
-	return cmd.CombinedOutput()
+func (nativeBackend) Set(service, account string, data []byte) error {
+	if err := nativekeychain.DeleteGenericPasswordItem(service, account); err != nil && err != nativekeychain.ErrorItemNotFound {
+		return err
+	}
+	item := nativekeychain.NewGenericPassword(service, account, service, data, "")
+	return nativekeychain.AddItem(item)
+}
+
+func (nativeBackend) Get(service, account string) ([]byte, error) {
+	data, err := nativekeychain.GetGenericPassword(service, account, "", "")
+	if err == nativekeychain.ErrorItemNotFound {
+		return nil, ErrItemNotFound
+	}
+	return data, err
+}
+
+func (nativeBackend) Delete(service, account string) error {
+	err := nativekeychain.DeleteGenericPasswordItem(service, account)
+	if err == nativekeychain.ErrorItemNotFound {
+		return ErrItemNotFound
+	}
+	return err
 }
 
 type Store struct {
-	runner Runner
+	backend Backend
 }
 
-func New() *Store                   { return NewStore(commandRunner{}) }
-func NewStore(runner Runner) *Store { return &Store{runner: runner} }
+func New() *Store                     { return NewStore(nativeBackend{}) }
+func NewStore(backend Backend) *Store { return &Store{backend: backend} }
 
-func (s *Store) Save(ctx context.Context, credential auth.Credential) error {
+func (s *Store) Save(_ context.Context, credential auth.Credential) error {
 	data, err := json.Marshal(credential)
 	if err != nil {
 		return errors.New("could not serialize credentials")
 	}
-	input := append(data, '\n')
-	_, err = s.runner.Run(ctx, input, "add-generic-password", "-s", service, "-a", credential.WorkspaceHost, "-U", "-w")
-	clear(input)
+	err = s.backend.Set(service, credential.WorkspaceHost, data)
 	clear(data)
 	if err != nil {
 		return errors.New("could not save credentials in macOS Keychain")
@@ -47,10 +67,10 @@ func (s *Store) Save(ctx context.Context, credential auth.Credential) error {
 	return nil
 }
 
-func (s *Store) Load(ctx context.Context, host string) (auth.Credential, error) {
-	data, err := s.runner.Run(ctx, nil, "find-generic-password", "-s", service, "-a", host, "-w")
+func (s *Store) Load(_ context.Context, host string) (auth.Credential, error) {
+	data, err := s.backend.Get(service, host)
 	if err != nil {
-		if isMissingItem(err) {
+		if errors.Is(err, ErrItemNotFound) {
 			return auth.Credential{}, fmt.Errorf("%w for workspace %s", auth.ErrNotFound, host)
 		}
 		return auth.Credential{}, errors.New("could not read credentials from macOS Keychain")
@@ -63,16 +83,11 @@ func (s *Store) Load(ctx context.Context, host string) (auth.Credential, error) 
 	return credential, nil
 }
 
-func (s *Store) Clear(ctx context.Context, host string) error {
-	_, err := s.runner.Run(ctx, nil, "delete-generic-password", "-s", service, "-a", host)
-	if err != nil && !isMissingItem(err) {
+func (s *Store) Clear(_ context.Context, host string) error {
+	err := s.backend.Delete(service, host)
+	if err != nil && !errors.Is(err, ErrItemNotFound) {
 		return errors.New("could not clear credentials from macOS Keychain")
 	}
 
 	return nil
-}
-
-func isMissingItem(err error) bool {
-	var exitError *exec.ExitError
-	return errors.As(err, &exitError) && exitError.ExitCode() == 44
 }

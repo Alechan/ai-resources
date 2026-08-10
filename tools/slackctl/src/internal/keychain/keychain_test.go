@@ -1,42 +1,50 @@
 package keychain
 
 import (
-	"context"
-	"strings"
 	"testing"
 
 	"github.com/Alechan/ai-resources/tools/slackctl/src/internal/auth"
 )
 
-type fakeRunner struct {
-	calls [][]string
-	in    []byte
-	out   []byte
-	err   error
+type fakeBackend struct {
+	service string
+	account string
+	data    []byte
 }
 
-func (f *fakeRunner) Run(_ context.Context, input []byte, args ...string) ([]byte, error) {
-	f.calls = append(f.calls, append([]string(nil), args...))
-	f.in = append([]byte(nil), input...)
-	return f.out, f.err
+func (f *fakeBackend) Set(service, account string, data []byte) error {
+	f.service = service
+	f.account = account
+	f.data = append([]byte(nil), data...)
+	return nil
 }
 
-func TestStoreUsesServiceAndWorkspaceAccount(t *testing.T) {
+func (f *fakeBackend) Get(service, account string) ([]byte, error) {
+	if service != f.service || account != f.account {
+		return nil, ErrItemNotFound
+	}
+	return append([]byte(nil), f.data...), nil
+}
+
+func (f *fakeBackend) Delete(service, account string) error {
+	if service != f.service || account != f.account {
+		return ErrItemNotFound
+	}
+	f.data = nil
+	return nil
+}
+
+func TestStoreRoundTripsCredentialThroughBackend(t *testing.T) {
 	ctx := t.Context()
-	runner := &fakeRunner{}
-	store := NewStore(runner)
+	backend := &fakeBackend{}
+	store := NewStore(backend)
 	cred := auth.Credential{WorkspaceHost: "alpha.slack.com", WorkspaceID: "T11111111", Token: auth.NewSecret("generated-token"), Cookie: auth.NewSecret("generated-cookie")}
 	if err := store.Save(ctx, cred); err != nil {
 		t.Fatal(err)
 	}
-	call := strings.Join(runner.calls[0], " ")
-	if !strings.Contains(call, "add-generic-password") || !strings.Contains(call, "-s slackctl") || !strings.Contains(call, "-a alpha.slack.com") || !strings.Contains(call, "-U") {
-		t.Fatalf("unexpected save command: %s", call)
+	if backend.service != "slackctl" || backend.account != cred.WorkspaceHost {
+		t.Fatalf("backend key = %s/%s", backend.service, backend.account)
 	}
-	if strings.Contains(call, cred.Token.Reveal()) || strings.Contains(call, cred.Cookie.Reveal()) {
-		t.Fatal("credential appeared in process arguments")
-	}
-	runner.out = runner.in
 	got, err := store.Load(ctx, cred.WorkspaceHost)
 	if err != nil || got.Token.Reveal() != cred.Token.Reveal() {
 		t.Fatalf("load = %#v, %v", got, err)
@@ -44,7 +52,7 @@ func TestStoreUsesServiceAndWorkspaceAccount(t *testing.T) {
 	if err := store.Clear(ctx, cred.WorkspaceHost); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(strings.Join(runner.calls[2], " "), "delete-generic-password") {
-		t.Fatal("clear did not call delete")
+	if backend.data != nil {
+		t.Fatal("clear did not delete backend data")
 	}
 }
