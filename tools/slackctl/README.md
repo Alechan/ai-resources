@@ -130,6 +130,38 @@ chronological messages, and nested chronological replies. Unknown Slack fields
 remain in immutable raw pages. Markdown preserves line breaks and renders Slack
 links and mentions without summarizing or interpreting content.
 
+### Markdown ambiguity
+
+`conversation.md` adds Markdown syntax for presentation. In particular, thread
+replies are rendered as blockquotes using `>`. Original message text may contain
+the same characters, so the visual transcript is not an unambiguous data format.
+For example, this original root-message text:
+
+```text
+Deployment finished.
+
+> This blockquote is part of the original message.
+```
+
+followed by a thread reply appears as:
+
+```markdown
+**2026-01-01 10:00 UTC — Example User**
+
+Deployment finished.
+
+> This blockquote is part of the original message.
+
+> **2026-01-01 10:05 UTC — Another User**
+>
+> This is an actual thread reply.
+```
+
+Use `messages_with_threads.json` when the distinction must be unambiguous:
+original content is stored in `text`, while actual replies are separate objects
+under `thread_replies`. Use `raw_history/` and `raw_threads/` when the original
+Slack API responses are required.
+
 On completion, `slackctl` checks ordering, bounds, thread coverage, counts, and
 the output tree for exact credential values. Unsafe affected files are removed
 and the command fails. Raw pages support deterministic resumption.

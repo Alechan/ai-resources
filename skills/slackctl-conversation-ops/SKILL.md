@@ -70,6 +70,11 @@ Supported operational commands are `slackctl init`, `slackctl doctor`, and
 - Confirm `manifest.json` has schema version 1 and `complete: true`.
 - Confirm requested formats exist and raw page directories exist when `raw` was
   selected.
+- Treat Markdown as a presentation format: original text can contain the same
+  `>` blockquote syntax used to render thread replies. Use
+  `messages_with_threads.json` for unambiguous processed data because `text` and
+  `thread_replies` are structurally separate; use raw page directories for the
+  original API responses.
 - Treat the built-in credential leak scan as mandatory; never bypass a failure.
 
 ## Safety
