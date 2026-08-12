@@ -71,7 +71,12 @@ authentication.
    `newest_exported`; and read `root_message_count`, `thread_reply_count`, and
    `participant_count`. Do not query nested `requested`, `exported`, `counts`,
    `warnings`, or `files` objects; schema version 1 does not define them.
-6. Report only output paths, counts, completeness, and warnings. Do not quote
+6. Treat `messages_with_threads.json` as normalized schema version 2. Every root
+   and reply has a non-null `reactions` array. A reaction's `count` is
+   authoritative; `user_ids` is only the sorted, deduplicated subset returned
+   by Slack and can be shorter than `count`. Reactor IDs are included in
+   `participants`.
+7. Report only output paths, counts, completeness, and warnings. Do not quote
    private message text.
 
 Supported operational commands are `slackctl init`, `slackctl doctor`, and
@@ -83,16 +88,20 @@ Supported operational commands are `slackctl init`, `slackctl doctor`, and
 - Require a successful command exit unless the user explicitly approved
   `--allow-partial`.
 - Confirm `manifest.json` has schema version 1 and `complete: true`.
+- Confirm `messages_with_threads.json` has schema version 2 and every message
+  and reply has a `reactions` array.
 - Confirm requested formats exist and raw page directories exist when `raw` was
   selected.
 - Interpret `requested_from` and `requested_to` as root-message boundaries.
   Complete selected threads may contain replies outside either boundary, and
   `oldest_exported` or `newest_exported` must truthfully include those replies.
 - Treat Markdown as a presentation format: original text can contain the same
-  `>` blockquote syntax used to render thread replies. Use
+  `>` blockquote syntax used to render thread replies. Generated
+  `_Reactions: ..._` lines are presentation metadata, and reaction lines for
+  replies remain inside the blockquote. Use
   `messages_with_threads.json` for unambiguous processed data because `text` and
   `thread_replies` are structurally separate; use raw page directories for the
-  original API responses.
+  authoritative original API responses.
 - Treat the built-in credential leak scan as mandatory; never bypass a failure.
 
 ## Safety

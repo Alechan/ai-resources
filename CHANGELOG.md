@@ -4,6 +4,10 @@
 
 ### Added
 
+- `slackctl conversation export` now preserves root and thread-reply reactions
+  in normalized JSON schema version 2, resolves returned reactor IDs as
+  participants, and renders clearly labeled reaction metadata in Markdown;
+  raw responses and manifest schema version 1 remain unchanged
 - `slackctl conversation export` now accepts generic Slack archive permalinks as
   exact inclusive root-message lower boundaries, selects the Keychain workspace
   from the permalink host, and preserves complete selected threads beyond root

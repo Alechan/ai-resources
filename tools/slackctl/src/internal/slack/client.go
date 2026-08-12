@@ -213,6 +213,13 @@ type Message struct {
 	ThreadTS    string       `json:"thread_ts,omitempty"`
 	ReplyCount  int          `json:"reply_count,omitempty"`
 	Attachments []Attachment `json:"attachments,omitempty"`
+	Reactions   []Reaction   `json:"reactions,omitempty"`
+}
+
+type Reaction struct {
+	Name  string   `json:"name"`
+	Count int      `json:"count"`
+	Users []string `json:"users"`
 }
 
 type Attachment struct {

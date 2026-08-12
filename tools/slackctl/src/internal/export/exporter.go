@@ -388,17 +388,9 @@ func (e *Exporter) fetchThread(ctx context.Context, options Options, root slack.
 func (e *Exporter) resolveParticipants(ctx context.Context, options Options, roots []slack.Message, replies map[string][]slack.Message) (map[string]Participant, []string) {
 	ids := make(map[string]bool)
 	for _, message := range roots {
-		if message.User != "" {
-			ids[message.User] = true
-		} else if message.BotID != "" {
-			ids[message.BotID] = true
-		}
+		collectIdentityIDs(ids, message)
 		for _, reply := range replies[message.Timestamp] {
-			if reply.User != "" {
-				ids[reply.User] = true
-			} else if reply.BotID != "" {
-				ids[reply.BotID] = true
-			}
+			collectIdentityIDs(ids, reply)
 		}
 	}
 	ordered := make([]string, 0, len(ids))
@@ -438,6 +430,21 @@ func (e *Exporter) resolveParticipants(ctx context.Context, options Options, roo
 		participants[id] = Participant{DisplayName: name, RealName: user.Profile.RealName, Deleted: user.Deleted, Unresolved: name == id}
 	}
 	return participants, warnings
+}
+
+func collectIdentityIDs(ids map[string]bool, message slack.Message) {
+	if message.User != "" {
+		ids[message.User] = true
+	} else if message.BotID != "" {
+		ids[message.BotID] = true
+	}
+	for _, reaction := range message.Reactions {
+		for _, userID := range reaction.Users {
+			if userID != "" {
+				ids[userID] = true
+			}
+		}
+	}
 }
 
 func botName(id string, roots []slack.Message, replies map[string][]slack.Message) string {
@@ -677,6 +684,9 @@ func Validate(manifest Manifest, document Document, fetchedThreads map[string]bo
 	var previous string
 	replyCount := 0
 	for _, message := range document.Messages {
+		if err := validateMessageReactions(message); err != nil {
+			return err
+		}
 		if previous != "" && compareTimestamp(previous, message.Timestamp) > 0 {
 			return errors.New("normalized messages are not chronological")
 		}
@@ -690,6 +700,9 @@ func Validate(manifest Manifest, document Document, fetchedThreads map[string]bo
 		}
 		var previousReply string
 		for _, reply := range message.ThreadReplies {
+			if err := validateMessageReactions(reply); err != nil {
+				return err
+			}
 			replyCount++
 			if previousReply != "" && compareTimestamp(previousReply, reply.Timestamp) > 0 {
 				return errors.New("thread replies are not chronological")
@@ -699,6 +712,28 @@ func Validate(manifest Manifest, document Document, fetchedThreads map[string]bo
 	}
 	if manifest.ThreadReplyCount != replyCount {
 		return errors.New("manifest thread reply count does not match normalized output")
+	}
+	return nil
+}
+
+func validateMessageReactions(message MessageDTO) error {
+	for _, reaction := range message.Reactions {
+		if reaction.Name == "" {
+			return errors.New("reaction name must not be empty")
+		}
+		if reaction.Count < 0 {
+			return errors.New("reaction count must not be negative")
+		}
+		if len(reaction.UserIDs) > reaction.Count {
+			return errors.New("returned reaction user count exceeds authoritative count")
+		}
+		seen := make(map[string]struct{}, len(reaction.UserIDs))
+		for _, userID := range reaction.UserIDs {
+			if _, exists := seen[userID]; exists {
+				return errors.New("reaction contains a duplicate user ID")
+			}
+			seen[userID] = struct{}{}
+		}
 	}
 	return nil
 }

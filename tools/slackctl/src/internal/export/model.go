@@ -28,12 +28,34 @@ type ConversationDTO struct {
 	Type string `json:"type"`
 }
 
+type ReactionDTO struct {
+	Name    string   `json:"name"`
+	Count   int      `json:"count"`
+	UserIDs []string `json:"user_ids"`
+}
+
+type ReactionList []ReactionDTO
+
+func (reactions ReactionList) MarshalJSON() ([]byte, error) {
+	if reactions == nil {
+		return []byte("[]"), nil
+	}
+	var output bytes.Buffer
+	encoder := json.NewEncoder(&output)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode([]ReactionDTO(reactions)); err != nil {
+		return nil, err
+	}
+	return bytes.TrimSuffix(output.Bytes(), []byte("\n")), nil
+}
+
 type MessageDTO struct {
 	Timestamp        string       `json:"timestamp"`
 	Datetime         string       `json:"datetime"`
 	AuthorID         string       `json:"author_id,omitempty"`
 	AuthorName       string       `json:"author_name"`
 	Text             string       `json:"text"`
+	Reactions        ReactionList `json:"reactions"`
 	ThreadReplyCount int          `json:"-"`
 	ThreadReplies    []MessageDTO `json:"thread_replies"`
 }
@@ -62,7 +84,7 @@ func Normalize(conversationID, conversationType string, roots []RawMessage, repl
 	if participants == nil {
 		participants = map[string]Participant{}
 	}
-	return Document{SchemaVersion: 1, Conversation: ConversationDTO{ID: conversationID, Type: conversationType}, Participants: participants, Messages: messages}
+	return Document{SchemaVersion: 2, Conversation: ConversationDTO{ID: conversationID, Type: conversationType}, Participants: participants, Messages: messages}
 }
 
 func normalizeMessage(message RawMessage, participants map[string]Participant) MessageDTO {
@@ -104,8 +126,34 @@ func normalizeMessage(message RawMessage, participants map[string]Participant) M
 		AuthorID:      authorID,
 		AuthorName:    authorName,
 		Text:          text,
+		Reactions:     normalizeReactions(message.Reactions),
 		ThreadReplies: []MessageDTO{},
 	}
+}
+
+func normalizeReactions(raw []slack.Reaction) ReactionList {
+	reactions := make(ReactionList, 0, len(raw))
+	for _, reaction := range raw {
+		seen := make(map[string]struct{}, len(reaction.Users))
+		userIDs := make([]string, 0, len(reaction.Users))
+		for _, userID := range reaction.Users {
+			if _, exists := seen[userID]; exists {
+				continue
+			}
+			seen[userID] = struct{}{}
+			userIDs = append(userIDs, userID)
+		}
+		sort.Strings(userIDs)
+		reactions = append(reactions, ReactionDTO{
+			Name:    reaction.Name,
+			Count:   reaction.Count,
+			UserIDs: userIDs,
+		})
+	}
+	sort.SliceStable(reactions, func(i, j int) bool {
+		return reactions[i].Name < reactions[j].Name
+	})
+	return reactions
 }
 
 func MarshalDocument(document Document) ([]byte, error) {
@@ -153,16 +201,61 @@ func RenderMarkdown(document Document) string {
 	var output strings.Builder
 	fmt.Fprintf(&output, "# Slack conversation export — %s\n\n", document.Conversation.ID)
 	for _, message := range document.Messages {
-		fmt.Fprintf(&output, "**%s — %s**\n\n%s\n\n", markdownTime(message.Datetime), escapeMarkdown(message.AuthorName), renderSlackText(message.Text, document.Participants))
+		fmt.Fprintf(&output, "**%s — %s**\n\n%s\n", markdownTime(message.Datetime), escapeMarkdown(message.AuthorName), renderSlackText(message.Text, document.Participants))
+		if reactions := renderReactions(message.Reactions, document.Participants); reactions != "" {
+			fmt.Fprintf(&output, "\n%s\n", reactions)
+		}
+		output.WriteString("\n")
 		for _, reply := range message.ThreadReplies {
 			fmt.Fprintf(&output, "> **%s — %s**\n>\n", markdownTime(reply.Datetime), escapeMarkdown(reply.AuthorName))
 			for _, line := range strings.Split(renderSlackText(reply.Text, document.Participants), "\n") {
 				fmt.Fprintf(&output, "> %s\n", line)
 			}
+			if reactions := renderReactions(reply.Reactions, document.Participants); reactions != "" {
+				fmt.Fprintf(&output, "> %s\n", reactions)
+			}
 			output.WriteString("\n")
 		}
 	}
 	return output.String()
+}
+
+func renderReactions(reactions []ReactionDTO, participants map[string]Participant) string {
+	if len(reactions) == 0 {
+		return ""
+	}
+	ordered := append([]ReactionDTO(nil), reactions...)
+	sort.SliceStable(ordered, func(i, j int) bool {
+		return ordered[i].Name < ordered[j].Name
+	})
+
+	rendered := make([]string, 0, len(ordered))
+	for _, reaction := range ordered {
+		value := ":" + escapeMarkdown(reaction.Name) + ": x" + strconv.Itoa(reaction.Count)
+		userIDs := append([]string(nil), reaction.UserIDs...)
+		sort.Strings(userIDs)
+		names := make([]string, 0, len(userIDs))
+		previous := ""
+		for _, userID := range userIDs {
+			if userID == previous {
+				continue
+			}
+			previous = userID
+			name := userID + " (unresolved)"
+			if participant, exists := participants[userID]; exists && participant.DisplayName != "" {
+				name = participant.DisplayName
+				if participant.Unresolved {
+					name += " (unresolved)"
+				}
+			}
+			names = append(names, escapeMarkdown(name))
+		}
+		if len(names) > 0 {
+			value += " - returned users: " + strings.Join(names, ", ")
+		}
+		rendered = append(rendered, value)
+	}
+	return "_Reactions: " + strings.Join(rendered, "; ") + "_"
 }
 
 func markdownTime(value string) string {
@@ -205,6 +298,17 @@ func renderSlackText(text string, participants map[string]Participant) string {
 }
 
 func escapeMarkdown(value string) string {
-	replacer := strings.NewReplacer(`\`, `\\`, `*`, `\*`, `_`, `\_`, `[`, `\[`, `]`, `\]`, "#", `\#`)
+	replacer := strings.NewReplacer(
+		`\`, `\\`,
+		"`", "\\`",
+		`*`, `\*`,
+		`_`, `\_`,
+		`[`, `\[`,
+		`]`, `\]`,
+		`<`, `\<`,
+		`>`, `\>`,
+		`#`, `\#`,
+		`~`, `\~`,
+	)
 	return replacer.Replace(value)
 }

@@ -488,3 +488,83 @@ func TestExporterAllowsExplicitPartialHistory(t *testing.T) {
 		t.Fatalf("manifest = %#v", result.Manifest)
 	}
 }
+
+func TestExporterIncludesRootAndReplyReactorsAsParticipants(t *testing.T) {
+	root := slack.Message{
+		Timestamp:  "100.000001",
+		User:       "U11111111",
+		ReplyCount: 1,
+		Reactions: []slack.Reaction{{
+			Name:  "ok",
+			Count: 2,
+			Users: []string{"U22222222", "U22222222"},
+		}},
+	}
+	reply := slack.Message{
+		Timestamp: "101.000001",
+		ThreadTS:  root.Timestamp,
+		Reactions: []slack.Reaction{{
+			Name:  "eyes",
+			Count: 2,
+			Users: []string{"U22222222", "U33333333"},
+		}},
+	}
+	api := &fakeAPI{
+		historyErrAt: -1,
+		history:      []slack.HistoryPage{{Messages: []slack.Message{root}}},
+		replies: map[string][]slack.HistoryPage{
+			root.Timestamp: {{Messages: []slack.Message{root, reply}}},
+		},
+		users: map[string]slack.User{
+			"U11111111": {ID: "U11111111", Profile: slack.UserProfile{DisplayName: "Example One"}},
+			"U22222222": {ID: "U22222222", Profile: slack.UserProfile{DisplayName: "Example Two"}},
+			"U33333333": {ID: "U33333333", Profile: slack.UserProfile{DisplayName: "Example Three"}},
+		},
+	}
+
+	result, err := NewExporter(api, time.Now).Run(t.Context(), testOptions(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Manifest.ParticipantCount != 3 {
+		t.Fatalf("participant count = %d, want 3", result.Manifest.ParticipantCount)
+	}
+	if result.Manifest.SchemaVersion != 1 || result.Document.SchemaVersion != 2 {
+		t.Fatalf("schema versions: manifest=%d document=%d", result.Manifest.SchemaVersion, result.Document.SchemaVersion)
+	}
+	for _, id := range []string{"U11111111", "U22222222", "U33333333"} {
+		if _, exists := result.Document.Participants[id]; !exists {
+			t.Errorf("participant %s was not resolved", id)
+		}
+		if api.userCalls[id] != 1 {
+			t.Errorf("user lookup calls for %s = %d, want 1", id, api.userCalls[id])
+		}
+	}
+}
+
+func TestExporterReactionResolutionFailureWarnsWithoutIncompleteExport(t *testing.T) {
+	const reactorID = "U44444444"
+	api := &fakeAPI{
+		historyErrAt: -1,
+		history: []slack.HistoryPage{{Messages: []slack.Message{{
+			Timestamp: "100.000001",
+			Reactions: []slack.Reaction{{Name: "ok", Count: 1, Users: []string{reactorID}}},
+		}}}},
+		replies:    map[string][]slack.HistoryPage{},
+		userErrors: map[string]error{reactorID: errors.New("synthetic lookup failure")},
+	}
+
+	result, err := NewExporter(api, time.Now).Run(t.Context(), testOptions(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Document.Participants[reactorID].Unresolved {
+		t.Fatalf("participant = %#v", result.Document.Participants[reactorID])
+	}
+	if len(result.Warnings) != 1 || !strings.Contains(result.Warnings[0], reactorID) {
+		t.Fatalf("warnings = %#v", result.Warnings)
+	}
+	if !result.Manifest.Complete || result.Manifest.ParticipantCount != 1 {
+		t.Fatalf("manifest = %#v", result.Manifest)
+	}
+}

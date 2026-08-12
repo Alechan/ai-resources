@@ -146,10 +146,32 @@ nested `requested`, `exported`, `counts`, `warnings`, or `files` objects.
 selection range. `oldest_exported` and `newest_exported` cover every emitted
 root and reply, so they can extend beyond that selection range.
 
-The normalized JSON keeps only conversation identity, resolved participants,
-chronological messages, and nested chronological replies. Unknown Slack fields
-remain in immutable raw pages. Markdown preserves line breaks and renders Slack
-links and mentions without summarizing or interpreting content.
+The normalized JSON document uses schema version 2. It keeps only conversation
+identity, resolved participants, chronological messages, and nested
+chronological replies. Every root and reply has a non-null `reactions` array.
+Each reaction contains:
+
+- `name`: the Slack emoji name, including custom emoji names;
+- `count`: Slack's authoritative reaction count;
+- `user_ids`: the sorted, deduplicated subset of reactor IDs returned by Slack.
+
+Slack may return fewer user IDs than `count`; do not infer that the returned
+list is complete. Reactor IDs are included in `participants` and use the same
+resolution and unresolved-warning behavior as message authors. Unknown Slack
+fields remain in immutable raw pages, which are the authoritative original API
+data.
+
+Markdown preserves line breaks and renders Slack links and mentions without
+summarizing or interpreting message content. It adds clearly labeled reaction
+presentation metadata immediately after a message:
+
+```markdown
+_Reactions: :ok: x3 - returned users: Example One, Example Two_
+```
+
+The authoritative count is always shown. The `returned users` clause is omitted
+when Slack returned no reactor IDs. Reaction metadata for thread replies stays
+inside the reply blockquote.
 
 Date boundaries apply only to root-message selection. With
 `--include-threads`, every available reply observed during export is retained
@@ -161,8 +183,10 @@ slice.
 ### Markdown ambiguity
 
 `conversation.md` adds Markdown syntax for presentation. In particular, thread
-replies are rendered as blockquotes using `>`. Original message text may contain
-the same characters, so the visual transcript is not an unambiguous data format.
+replies are rendered as blockquotes using `>`, and `_Reactions: ..._` lines are
+generated presentation metadata rather than original message text. Original
+message text may contain the same characters, so the visual transcript is not
+an unambiguous data format.
 For example, this original root-message text:
 
 ```text

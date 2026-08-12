@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -111,5 +112,60 @@ func TestClientTimeout(t *testing.T) {
 	client := NewClient(server.URL, testCredential(t), WithHTTPClient(httpClient), WithRequestDelay(0), WithMaxAttempts(1))
 	if _, err := client.AuthTest(t.Context()); err == nil {
 		t.Fatal("expected timeout")
+	}
+}
+
+func TestHistoryDecodesMessageReactions(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want []Reaction
+	}{
+		{
+			name: "one reaction",
+			body: `{"ok":true,"messages":[{"ts":"100.000001","reactions":[{"name":"ok","count":3,"users":["U22222222","U33333333"]}]}]}`,
+			want: []Reaction{{Name: "ok", Count: 3, Users: []string{"U22222222", "U33333333"}}},
+		},
+		{
+			name: "multiple reactions",
+			body: `{"ok":true,"messages":[{"ts":"100.000001","reactions":[{"name":"eyes","count":1,"users":["U22222222"]},{"name":"custom_status","count":2,"users":["U33333333"]}]}]}`,
+			want: []Reaction{
+				{Name: "eyes", Count: 1, Users: []string{"U22222222"}},
+				{Name: "custom_status", Count: 2, Users: []string{"U33333333"}},
+			},
+		},
+		{
+			name: "missing reactions",
+			body: `{"ok":true,"messages":[{"ts":"100.000001"}]}`,
+		},
+		{
+			name: "authoritative count exceeds returned users",
+			body: `{"ok":true,"messages":[{"ts":"100.000001","reactions":[{"name":"ok","count":4,"users":["U22222222"]}]}]}`,
+			want: []Reaction{{Name: "ok", Count: 4, Users: []string{"U22222222"}}},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = io.WriteString(w, tc.body)
+			}))
+			defer server.Close()
+
+			page, raw, err := NewClient(server.URL, testCredential(t), WithRequestDelay(0)).History(
+				t.Context(), "C22222222", "", "", "", 100,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(page.Messages) != 1 {
+				t.Fatalf("messages = %#v", page.Messages)
+			}
+			if !reflect.DeepEqual(page.Messages[0].Reactions, tc.want) {
+				t.Fatalf("reactions = %#v, want %#v", page.Messages[0].Reactions, tc.want)
+			}
+			if string(raw) != tc.body {
+				t.Fatalf("raw response changed: %q, want %q", raw, tc.body)
+			}
+		})
 	}
 }
