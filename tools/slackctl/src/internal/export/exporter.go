@@ -252,10 +252,10 @@ func newManifest(options Options, now time.Time) Manifest {
 		WorkspaceID:    options.WorkspaceID,
 		ConversationID: options.ConversationID,
 		ExportedAt:     now.UTC().Format(time.RFC3339),
-		RequestedTo:    options.Range.To.UTC().Format(time.RFC3339),
+		RequestedTo:    options.Range.To.UTC().Format(time.RFC3339Nano),
 	}
 	if !options.Range.From.IsZero() {
-		value := options.Range.From.UTC().Format(time.RFC3339)
+		value := options.Range.From.UTC().Format(time.RFC3339Nano)
 		manifest.RequestedFrom = &value
 	}
 	return manifest
@@ -336,7 +336,10 @@ func (e *Exporter) fetchThread(ctx context.Context, options Options, root slack.
 		if err := validateMessages(page.Messages); err != nil {
 			return nil, err
 		}
-		addThreadMessages(replies, page.Messages, root.Timestamp, options.Range)
+		if err := validateThreadParents(page.Messages, root.Timestamp); err != nil {
+			return nil, err
+		}
+		addThreadMessages(replies, page.Messages, root.Timestamp)
 		cursor = page.ResponseMetadata.NextCursor
 		hasMore = page.HasMore
 	}
@@ -359,7 +362,10 @@ func (e *Exporter) fetchThread(ctx context.Context, options Options, root slack.
 			if err := validateMessages(page.Messages); err != nil {
 				return nil, err
 			}
-			addThreadMessages(replies, page.Messages, root.Timestamp, options.Range)
+			if err := validateThreadParents(page.Messages, root.Timestamp); err != nil {
+				return nil, err
+			}
+			addThreadMessages(replies, page.Messages, root.Timestamp)
 			next := page.ResponseMetadata.NextCursor
 			if page.HasMore && next == "" {
 				return nil, fmt.Errorf("thread %s response is missing a pagination cursor", root.Timestamp)
@@ -561,6 +567,15 @@ func validateMessages(messages []slack.Message) error {
 	return nil
 }
 
+func validateThreadParents(messages []slack.Message, rootTimestamp string) error {
+	for _, message := range messages {
+		if message.Timestamp != rootTimestamp && message.ThreadTS != "" && message.ThreadTS != rootTimestamp {
+			return errors.New("thread reply parent does not match the selected root")
+		}
+	}
+	return nil
+}
+
 func allDigits(value string) bool {
 	for _, character := range value {
 		if character < '0' || character > '9' {
@@ -570,12 +585,9 @@ func allDigits(value string) bool {
 	return true
 }
 
-func addThreadMessages(destination map[string]slack.Message, source []slack.Message, rootTimestamp string, requested TimeRange) {
+func addThreadMessages(destination map[string]slack.Message, source []slack.Message, rootTimestamp string) {
 	for _, message := range source {
-		at := timestampTime(message.Timestamp)
-		if message.Timestamp == rootTimestamp ||
-			(!requested.From.IsZero() && at.Before(requested.From)) ||
-			at.After(requested.To) {
+		if message.Timestamp == rootTimestamp {
 			continue
 		}
 		destination[message.Timestamp] = message
@@ -679,10 +691,6 @@ func Validate(manifest Manifest, document Document, fetchedThreads map[string]bo
 		var previousReply string
 		for _, reply := range message.ThreadReplies {
 			replyCount++
-			replyAt := timestampTime(reply.Timestamp)
-			if (!from.IsZero() && replyAt.Before(from)) || (!to.IsZero() && replyAt.After(to)) {
-				return errors.New("thread reply is outside requested range")
-			}
 			if previousReply != "" && compareTimestamp(previousReply, reply.Timestamp) > 0 {
 				return errors.New("thread replies are not chronological")
 			}

@@ -4,6 +4,10 @@
 
 ### Added
 
+- `slackctl conversation export` now accepts generic Slack archive permalinks as
+  exact inclusive root-message lower boundaries, selects the Keychain workspace
+  from the permalink host, and preserves complete selected threads beyond root
+  time bounds
 - `slackctl` tool and `slackctl-conversation-ops` skill for safe, resumable Slack conversation exports with raw, JSON, and Markdown output
 - `scripts/install_cursor_skill.sh`: install skills into `~/.cursor/skills/` via symlinks
 - `scripts/install_git_hooks.sh`: install git hooks that strip Co-authored-by trailers

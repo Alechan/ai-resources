@@ -19,9 +19,10 @@ authentication.
 
 ## Inputs
 
-- A Slack conversation URL or conversation ID.
-- The workspace host.
-- Either all accessible history or explicit inclusive time bounds.
+- A Slack conversation ID, app URL, or root-message archive permalink.
+- The workspace host, unless an archive permalink supplies it.
+- All accessible history, explicit inclusive root-message time bounds, or a
+  permalink-derived inclusive lower root-message boundary.
 - A private local output directory and selected formats.
 - Whether an incomplete result may be accepted.
 
@@ -49,7 +50,21 @@ authentication.
    ```
 
    For a bounded export, replace `--all` with `--from` and optionally `--to`.
-   Resume an interrupted filesystem export with `--resume`.
+   To begin at a linked root message without specifying a workspace:
+
+   ```bash
+   slackctl conversation export \
+     'https://example.slack.com/archives/C22222222/p1786455295071869' \
+     --include-threads \
+     --format raw,json,markdown \
+     --output ../conversation-export
+   ```
+
+   The permalink supplies an exact inclusive lower root-message boundary. Do
+   not combine it with `--all` or `--from`; `--to` is allowed. If an explicit
+   or environment workspace is present, it must match the permalink host.
+   Reject reply permalinks containing `thread_ts` and request the root-message
+   permalink. Resume an interrupted filesystem export with `--resume`.
 
 5. Read the flat schema-v1 `manifest.json`. Verify top-level `complete` is true;
    compare `requested_from` and `requested_to` with `oldest_exported` and
@@ -70,6 +85,9 @@ Supported operational commands are `slackctl init`, `slackctl doctor`, and
 - Confirm `manifest.json` has schema version 1 and `complete: true`.
 - Confirm requested formats exist and raw page directories exist when `raw` was
   selected.
+- Interpret `requested_from` and `requested_to` as root-message boundaries.
+  Complete selected threads may contain replies outside either boundary, and
+  `oldest_exported` or `newest_exported` must truthfully include those replies.
 - Treat Markdown as a presentation format: original text can contain the same
   `>` blockquote syntax used to render thread replies. Use
   `messages_with_threads.json` for unambiguous processed data because `text` and

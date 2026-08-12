@@ -90,6 +90,24 @@ slackctl conversation export C22222222 \
   --output ./conversation-export
 ```
 
+Start at the root message identified by an archive permalink:
+
+```bash
+slackctl conversation export \
+  'https://example.slack.com/archives/C22222222/p1786455295071869' \
+  --include-threads \
+  --format raw,json,markdown \
+  --output ../conversation-export
+```
+
+The permalink host selects the matching Keychain account, so `--workspace` is
+not required. If `--workspace` or `SLACKCTL_WORKSPACE` is also set, it must match
+the permalink host exactly. The permalink timestamp is converted to Slack's
+`seconds.microseconds` form without losing precision and is the inclusive lower
+boundary for selecting root messages. Do not combine a permalink with `--all`
+or `--from`; `--to` remains available. Reply permalinks containing `thread_ts`
+are rejected—copy the root-message permalink instead.
+
 Times accept RFC3339, `now`, or relative values such as `now-2d`. Use
 `--resume` after an interruption. Use `--allow-partial` only when an incomplete
 result is explicitly acceptable. `--page-size` defaults to 100 and
@@ -124,11 +142,21 @@ raw_threads/thread_100_000001_page_0001.json
 `oldest_exported`, `newest_exported`, `root_message_count`,
 `thread_reply_count`, `participant_count`, and `complete`. It does not contain
 nested `requested`, `exported`, `counts`, `warnings`, or `files` objects.
+`requested_from` and `requested_to` describe the inclusive root-message
+selection range. `oldest_exported` and `newest_exported` cover every emitted
+root and reply, so they can extend beyond that selection range.
 
 The normalized JSON keeps only conversation identity, resolved participants,
 chronological messages, and nested chronological replies. Unknown Slack fields
 remain in immutable raw pages. Markdown preserves line breaks and renders Slack
 links and mentions without summarizing or interpreting content.
+
+Date boundaries apply only to root-message selection. With
+`--include-threads`, every available reply observed during export is retained
+for each selected root, including replies later than `--to`. Roots outside the
+range are excluded and their threads are not fetched. This complete-thread
+behavior means normalized and raw thread output is not a strict event-time
+slice.
 
 ### Markdown ambiguity
 

@@ -24,6 +24,7 @@ type fakeAPI struct {
 	conversation slack.Conversation
 	historyErrAt int
 	threadErrFor string
+	threadErrAt  map[string]int
 }
 
 func (f *fakeAPI) History(_ context.Context, _, _, _, _ string, _ int) (slack.HistoryPage, []byte, error) {
@@ -47,6 +48,9 @@ func (f *fakeAPI) Replies(_ context.Context, _, timestamp, _ string, _ int) (sla
 		f.replyCalls = make(map[string]int)
 	}
 	index := f.replyCalls[timestamp]
+	if errorIndex, ok := f.threadErrAt[timestamp]; ok && index == errorIndex {
+		return slack.HistoryPage{}, nil, errors.New("synthetic thread interruption")
+	}
 	f.replyCalls[timestamp]++
 	page := f.replies[timestamp][index]
 	return page, envelopeJSON(page), nil
@@ -133,6 +137,42 @@ func TestExporterPaginatesDeduplicatesThreadsAndUsers(t *testing.T) {
 	}
 }
 
+func TestExporterIncludesPermalinkBoundaryRootExactlyOnce(t *testing.T) {
+	options := testOptions(t)
+	options.Range = TimeRange{
+		From:       time.Unix(1786455295, 71869000).UTC(),
+		To:         time.Unix(1786456000, 0).UTC(),
+		FromSource: RangeFromPermalink,
+	}
+	boundary := slack.Message{Timestamp: "1786455295.071869", Text: "boundary root"}
+	api := &fakeAPI{
+		historyErrAt: -1,
+		history: []slack.HistoryPage{
+			{
+				Messages: []slack.Message{
+					{Timestamp: "1786455296.000001", Text: "later root"},
+					boundary,
+				},
+				HasMore: true,
+			},
+			{Messages: []slack.Message{
+				boundary,
+				{Timestamp: "1786455295.071868", Text: "earlier root"},
+			}},
+		},
+		replies: map[string][]slack.HistoryPage{},
+	}
+	result, err := NewExporter(api, time.Now).Run(t.Context(), options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Document.Messages) != 2 ||
+		result.Document.Messages[0].Timestamp != boundary.Timestamp ||
+		result.Manifest.RootMessageCount != 2 {
+		t.Fatalf("selected roots = %#v", result.Document.Messages)
+	}
+}
+
 func testOptionsPath(result Result, _ *fakeAPI, path string) string {
 	return filepath.Join(result.OutputDir, path)
 }
@@ -191,6 +231,77 @@ func TestExporterResumeRejectsDifferentRequest(t *testing.T) {
 	}
 }
 
+func TestExporterResumeCompletesPermalinkThreadPages(t *testing.T) {
+	options := testOptions(t)
+	options.Range = TimeRange{
+		From:       time.Unix(100, 1_000).UTC(),
+		To:         time.Unix(120, 0).UTC(),
+		FromSource: RangeFromPermalink,
+	}
+	root := slack.Message{Timestamp: "100.000001", ReplyCount: 2}
+	api := &fakeAPI{
+		historyErrAt: -1,
+		history:      []slack.HistoryPage{{Messages: []slack.Message{root}}},
+		replies: map[string][]slack.HistoryPage{
+			root.Timestamp: {
+				{
+					Messages:         []slack.Message{root, {Timestamp: "110.000001", Text: "first reply"}},
+					HasMore:          true,
+					ResponseMetadata: slack.ResponseMetadata{NextCursor: "next"},
+				},
+				{Messages: []slack.Message{{Timestamp: "130.000001", Text: "late reply"}}},
+			},
+		},
+		threadErrAt: map[string]int{root.Timestamp: 1},
+	}
+	if _, err := NewExporter(api, time.Now).Run(t.Context(), options); err == nil {
+		t.Fatal("first run should be interrupted in the second thread page")
+	}
+
+	delete(api.threadErrAt, root.Timestamp)
+	options.Resume = true
+	result, err := NewExporter(api, time.Now).Run(t.Context(), options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Manifest.ThreadReplyCount != 2 ||
+		result.Manifest.NewestExported != "1970-01-01T00:02:10.000001Z" ||
+		len(result.Document.Messages[0].ThreadReplies) != 2 {
+		t.Fatalf("resumed result = %#v", result)
+	}
+	for _, path := range []string{
+		"raw_threads/thread_100_000001_page_0001.json",
+		"raw_threads/thread_100_000001_page_0002.json",
+	} {
+		if _, err := os.Stat(filepath.Join(options.OutputDir, path)); err != nil {
+			t.Fatalf("missing deterministic raw page %s: %v", path, err)
+		}
+	}
+}
+
+func TestExporterResumeRejectsDifferentPermalinkBoundary(t *testing.T) {
+	options := testOptions(t)
+	options.Range = TimeRange{
+		From:       time.Unix(100, 1_000).UTC(),
+		To:         time.Unix(120, 0).UTC(),
+		FromSource: RangeFromPermalink,
+	}
+	api := &fakeAPI{
+		historyErrAt: 0,
+		history:      []slack.HistoryPage{{Messages: []slack.Message{{Timestamp: "100.000001"}}}},
+		replies:      map[string][]slack.HistoryPage{},
+	}
+	if _, err := NewExporter(api, time.Now).Run(t.Context(), options); err == nil {
+		t.Fatal("first run should be interrupted")
+	}
+	options.Resume = true
+	options.Range.From = time.Unix(100, 2_000).UTC()
+	api.historyErrAt = -1
+	if _, err := NewExporter(api, time.Now).Run(t.Context(), options); err == nil || !strings.Contains(err.Error(), "does not match") {
+		t.Fatalf("resume mismatch error = %v", err)
+	}
+}
+
 func readJSONFile(t *testing.T, path string, output any) {
 	t.Helper()
 	data, err := os.ReadFile(path)
@@ -242,27 +353,64 @@ func TestExporterCanExcludeThreads(t *testing.T) {
 	}
 }
 
-func TestExporterFiltersThreadRepliesToRequestedRange(t *testing.T) {
+func TestExporterRootRangeRetainsCompleteSelectedThreads(t *testing.T) {
 	options := testOptions(t)
 	options.Range = TimeRange{From: time.Unix(90, 0).UTC(), To: time.Unix(105, 0).UTC()}
-	root := slack.Message{Timestamp: "100.000001", ReplyCount: 2}
+	root := slack.Message{Timestamp: "100.000001", ReplyCount: 4}
+	excludedRoot := slack.Message{Timestamp: "80.000001", ReplyCount: 1}
 	api := &fakeAPI{
 		historyErrAt: -1,
-		history:      []slack.HistoryPage{{Messages: []slack.Message{root}}},
+		history:      []slack.HistoryPage{{Messages: []slack.Message{root, excludedRoot}}},
 		replies: map[string][]slack.HistoryPage{
-			root.Timestamp: {{Messages: []slack.Message{
-				root,
-				{Timestamp: "101.000001", Text: "inside"},
-				{Timestamp: "110.000001", Text: "outside"},
-			}}},
+			root.Timestamp: {
+				{
+					Messages: []slack.Message{
+						root,
+						{Timestamp: "110.000001", Text: "after upper root boundary"},
+						{Timestamp: "101.000001", Text: "inside root range"},
+					},
+					ResponseMetadata: slack.ResponseMetadata{NextCursor: "next"},
+				},
+				{
+					Messages: []slack.Message{
+						{Timestamp: "89.000001", Text: "before lower root boundary"},
+						{Timestamp: "101.000001", Text: "inside root range"},
+					},
+				},
+			},
 		},
 	}
 	result, err := NewExporter(api, time.Now).Run(t.Context(), options)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Manifest.ThreadReplyCount != 1 || len(result.Document.Messages[0].ThreadReplies) != 1 {
-		t.Fatalf("out-of-range reply was retained: %#v", result.Document.Messages[0].ThreadReplies)
+	if result.Manifest.RootMessageCount != 1 || result.Manifest.ThreadReplyCount != 3 {
+		t.Fatalf("manifest = %#v", result.Manifest)
+	}
+	got := result.Document.Messages[0].ThreadReplies
+	if len(got) != 3 || got[0].Timestamp != "89.000001" || got[1].Timestamp != "101.000001" || got[2].Timestamp != "110.000001" {
+		t.Fatalf("thread replies = %#v", got)
+	}
+	if api.replyCalls[excludedRoot.Timestamp] != 0 {
+		t.Fatalf("excluded root thread was fetched %d times", api.replyCalls[excludedRoot.Timestamp])
+	}
+}
+
+func TestExporterRejectsReplyFromDifferentThread(t *testing.T) {
+	options := testOptions(t)
+	root := slack.Message{Timestamp: "100.000001", ReplyCount: 1}
+	api := &fakeAPI{
+		historyErrAt: -1,
+		history:      []slack.HistoryPage{{Messages: []slack.Message{root}}},
+		replies: map[string][]slack.HistoryPage{
+			root.Timestamp: {{Messages: []slack.Message{
+				root,
+				{Timestamp: "101.000001", ThreadTS: "99.000001", Text: "wrong parent"},
+			}}},
+		},
+	}
+	if _, err := NewExporter(api, time.Now).Run(t.Context(), options); err == nil || !strings.Contains(err.Error(), "parent") {
+		t.Fatalf("thread parent error = %v", err)
 	}
 }
 

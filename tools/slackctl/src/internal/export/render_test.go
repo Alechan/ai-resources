@@ -3,6 +3,7 @@ package export
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestRenderMarkdownSlackTextAndThreads(t *testing.T) {
@@ -92,6 +93,64 @@ func TestValidateDetectsIncorrectCountsAndReplyRange(t *testing.T) {
 	}}}
 	if err := Validate(manifest, doc, map[string]bool{"100.000001": true}); err == nil {
 		t.Fatal("expected count or reply range error")
+	}
+}
+
+func TestManifestPreservesPermalinkMicrosecondsAndLateReplyBounds(t *testing.T) {
+	options := Options{
+		Range: TimeRange{
+			From:       time.Unix(1786455295, 71869000).UTC(),
+			To:         time.Unix(1786456000, 0).UTC(),
+			FromSource: RangeFromPermalink,
+		},
+	}
+	manifest := newManifest(options, time.Unix(1786456000, 0).UTC())
+	if manifest.RequestedFrom == nil || *manifest.RequestedFrom != "2026-08-11T13:34:55.071869Z" {
+		t.Fatalf("requested_from = %#v", manifest.RequestedFrom)
+	}
+	document := Document{
+		Messages: []MessageDTO{{
+			Timestamp:        "1786455295.071869",
+			ThreadReplyCount: 1,
+			ThreadReplies: []MessageDTO{{
+				Timestamp: "1786457000.000001",
+			}},
+		}},
+		Participants: map[string]Participant{},
+	}
+	populateManifest(&manifest, document, true)
+	if manifest.NewestExported != "2026-08-11T14:03:20.000001Z" ||
+		manifest.RootMessageCount != 1 ||
+		manifest.ThreadReplyCount != 1 ||
+		!manifest.Complete {
+		t.Fatalf("manifest = %#v", manifest)
+	}
+}
+
+func TestValidateAppliesRequestedRangeOnlyToRoots(t *testing.T) {
+	manifest := Manifest{
+		RequestedFrom:    stringPointer("1970-01-01T00:01:39.000001Z"),
+		RequestedTo:      "1970-01-01T00:01:45Z",
+		RootMessageCount: 1,
+		ThreadReplyCount: 2,
+	}
+	document := Document{
+		Participants: map[string]Participant{},
+		Messages: []MessageDTO{{
+			Timestamp:        "100.000001",
+			ThreadReplyCount: 2,
+			ThreadReplies: []MessageDTO{
+				{Timestamp: "89.000001"},
+				{Timestamp: "110.000001"},
+			},
+		}},
+	}
+	if err := Validate(manifest, document, map[string]bool{"100.000001": true}); err != nil {
+		t.Fatalf("complete thread outside root range should be valid: %v", err)
+	}
+	document.Messages[0].Timestamp = "110.000001"
+	if err := Validate(manifest, document, map[string]bool{"110.000001": true}); err == nil || !strings.Contains(err.Error(), "message") {
+		t.Fatalf("root outside range error = %v", err)
 	}
 }
 

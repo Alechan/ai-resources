@@ -47,6 +47,7 @@ type application struct {
 	stdout        io.Writer
 	stderr        io.Writer
 	getenv        func(string) string
+	now           func() time.Time
 }
 
 type commonOptions struct {
@@ -64,6 +65,7 @@ func main() {
 		stdout: os.Stdout,
 		stderr: os.Stderr,
 		getenv: os.Getenv,
+		now:    time.Now,
 		clientFactory: func(credential auth.Credential, options clientOptions) slackAPI {
 			httpClient := &http.Client{Timeout: options.timeout}
 			clientOptions := []slack.Option{
@@ -163,7 +165,14 @@ Export options:
   --page-size N          API page size (default 100)
   --request-delay TIME   delay between API requests (default 500ms)
   --resume               continue from raw pages
-  --allow-partial        permit an incomplete export`)
+  --allow-partial        permit an incomplete export
+
+Message permalink example:
+  https://example.slack.com/archives/C22222222/p1786455295071869
+  The permalink timestamp is an inclusive lower root-message boundary and
+  selects its workspace. Do not combine it with --all or --from. With threads,
+  complete selected threads can contain replies outside root-message time bounds.
+  Reply permalinks containing thread_ts are rejected; use the root permalink.`)
 }
 
 func addCommonFlags(flags *flag.FlagSet, options *commonOptions) {
@@ -273,6 +282,10 @@ func (a *application) runDoctor(ctx context.Context, args []string) error {
 }
 
 func (a *application) runExport(ctx context.Context, args []string) error {
+	commandStartedAt := time.Now()
+	if a.now != nil {
+		commandStartedAt = a.now()
+	}
 	if len(args) == 0 {
 		return errors.New("usage: slackctl conversation export <URL-or-ID> [options]")
 	}
@@ -296,11 +309,16 @@ func (a *application) runExport(ctx context.Context, args []string) error {
 	if err := flags.Parse(args[1:]); err != nil {
 		return err
 	}
-	if err := a.normalizeCommon(&common); err != nil {
+	ref, err := exporter.ParseConversation(target, "")
+	if err != nil {
 		return err
 	}
-	if common.workspace == "" {
-		return errors.New("--workspace or SLACKCTL_WORKSPACE is required")
+	if common.timeout <= 0 {
+		return errors.New("--timeout must be positive")
+	}
+	common.workspace, err = resolveExportWorkspace(ref.WorkspaceHost, common.workspace, a.getenv("SLACKCTL_WORKSPACE"))
+	if err != nil {
+		return err
 	}
 	if *stdout && *output != "" {
 		return errors.New("--stdout and --output are mutually exclusive")
@@ -321,7 +339,7 @@ func (a *application) runExport(ctx context.Context, args []string) error {
 			return errors.New("--resume found an invalid manifest")
 		}
 		*to = previous.RequestedTo
-		if !*all && *from == "" {
+		if ref.StartingTimestamp == "" && !*all && *from == "" {
 			if previous.RequestedFrom == nil {
 				*all = true
 			} else {
@@ -329,7 +347,12 @@ func (a *application) runExport(ctx context.Context, args []string) error {
 			}
 		}
 	}
-	timeRange, err := exporter.NormalizeRequest(exporter.RequestInput{All: *all, From: *from, To: *to}, time.Now())
+	timeRange, err := exporter.NormalizeRequest(exporter.RequestInput{
+		All:           *all,
+		From:          *from,
+		To:            *to,
+		PermalinkFrom: ref.StartingTimestamp,
+	}, commandStartedAt)
 	if err != nil {
 		return err
 	}
@@ -342,14 +365,13 @@ func (a *application) runExport(ctx context.Context, args []string) error {
 	}
 	credential, err := a.store.Load(ctx, common.workspace)
 	if err != nil {
-		return errors.New("credentials not found; run slackctl init")
+		return fmt.Errorf("credentials not found for %s; run slackctl init", common.workspace)
 	}
-	ref, err := exporter.ParseConversation(target, credential.WorkspaceID)
-	if err != nil {
-		return err
+	if ref.WorkspaceID != "" && credential.WorkspaceID != ref.WorkspaceID {
+		return errors.New("conversation workspace does not match credentials")
 	}
 	client := a.newClient(credential, common, *requestDelay)
-	result, err := exporter.NewExporter(client, time.Now).Run(ctx, exporter.Options{
+	result, err := exporter.NewExporter(client, func() time.Time { return commandStartedAt }).Run(ctx, exporter.Options{
 		WorkspaceHost:  credential.WorkspaceHost,
 		WorkspaceID:    credential.WorkspaceID,
 		ConversationID: ref.ConversationID,
@@ -425,7 +447,34 @@ func parseFormats(value string) (map[exporter.Format]bool, error) {
 }
 
 func validWorkspaceHost(host string) bool {
-	return host != "slack.com" && strings.HasSuffix(host, ".slack.com") && !strings.ContainsAny(host, "/:@ ")
+	return exporter.ValidWorkspaceHost(host)
+}
+
+func resolveExportWorkspace(permalinkHost, explicitHost, environmentHost string) (string, error) {
+	for _, source := range []struct {
+		name string
+		host string
+	}{{"permalink", permalinkHost}, {"--workspace", explicitHost}, {"SLACKCTL_WORKSPACE", environmentHost}} {
+		if source.host != "" && !validWorkspaceHost(source.host) {
+			return "", fmt.Errorf("%s must be a Slack workspace host", source.name)
+		}
+	}
+	if permalinkHost != "" {
+		if explicitHost != "" && explicitHost != permalinkHost {
+			return "", errors.New("--workspace workspace does not match permalink workspace")
+		}
+		if environmentHost != "" && environmentHost != permalinkHost {
+			return "", errors.New("SLACKCTL_WORKSPACE workspace does not match permalink workspace")
+		}
+		return permalinkHost, nil
+	}
+	if explicitHost != "" {
+		return explicitHost, nil
+	}
+	if environmentHost != "" {
+		return environmentHost, nil
+	}
+	return "", errors.New("--workspace or SLACKCTL_WORKSPACE is required")
 }
 
 func containsArg(args []string, wanted string) bool {
