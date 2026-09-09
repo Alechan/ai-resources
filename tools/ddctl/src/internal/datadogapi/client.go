@@ -57,7 +57,7 @@ func (c *Client) Delete(ctx context.Context, path string, out any) error {
 func (c *Client) request(ctx context.Context, method, path string, body, out any) error {
 	var reader io.Reader
 	if body != nil {
-		b, err := c.marshalBody(body)
+		b, err := c.marshalBody(path, body)
 		if err != nil {
 			return err
 		}
@@ -77,10 +77,13 @@ func (c *Client) request(ctx context.Context, method, path string, body, out any
 	return c.do(req, out, started)
 }
 
-func (c *Client) marshalBody(body any) ([]byte, error) {
+func (c *Client) marshalBody(path string, body any) ([]byte, error) {
 	b, err := json.Marshal(body)
 	if err != nil {
 		return nil, fail.NewAPI("failed to marshal request body", "", err.Error())
+	}
+	if !pathNeedsCSRF(path) {
+		return b, nil
 	}
 	if csrf := c.csrfToken(); csrf != "" {
 		var m map[string]any
@@ -141,25 +144,48 @@ func (c *Client) addAuth(req *http.Request) error {
 }
 
 func (c *Client) do(req *http.Request, out any, started time.Time) error {
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return fail.MapNetworkOrAPI(err)
+	maxAttempts := 1
+	if req.Method == http.MethodGet {
+		maxAttempts = 3
 	}
-	defer resp.Body.Close()
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fail.NewAPI("failed to read response body", "", "")
+
+	var bodyBytes []byte
+	status := 0
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		if attempt > 0 {
+			time.Sleep(time.Duration(attempt) * 250 * time.Millisecond)
+			if c.debug != nil {
+				c.debug.Printf("retry %s %s after HTTP %d (attempt %d)", req.Method, req.URL.Path, status, attempt+1)
+			}
+		}
+
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			return fail.MapNetworkOrAPI(err)
+		}
+		bodyBytes, err = io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return fail.NewAPI("failed to read response body", "", "")
+		}
+		status = resp.StatusCode
+		c.logRequest(req.Method, req.URL.Path, status, started)
+
+		if req.Method == http.MethodGet && (status == http.StatusTooManyRequests || status == http.StatusServiceUnavailable) && attempt < maxAttempts-1 {
+			continue
+		}
+		break
 	}
-	c.logRequest(req.Method, req.URL.Path, resp.StatusCode, started)
-	if resp.StatusCode == 401 || resp.StatusCode == 403 {
+
+	if status == 401 || status == 403 {
 		return fail.NewAuth(
-			fmt.Sprintf("HTTP %d: authentication required", resp.StatusCode),
+			fmt.Sprintf("HTTP %d: authentication required", status),
 			fmt.Sprintf("refresh Keychain session credentials with ddctl init (app.%s)", c.site),
 		)
 	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+	if status < 200 || status >= 300 {
 		return fail.NewAPI(
-			fmt.Sprintf("HTTP %d", resp.StatusCode),
+			fmt.Sprintf("HTTP %d", status),
 			"inspect API response",
 			redactDetails(string(bodyBytes), c.debug != nil),
 		)

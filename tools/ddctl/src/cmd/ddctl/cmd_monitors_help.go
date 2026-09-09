@@ -59,6 +59,9 @@ const helpMonitorsList = `Usage:
 
 List DataDog monitors with pagination.
 
+Note: --tag filters client-side after loading monitors from Datadog.
+Large accounts may be slow.
+
 Flags:
   --tag <tag>   Filter monitors that include this exact tag
 

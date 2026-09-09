@@ -156,7 +156,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "Global flags:")
 	fmt.Fprintln(w, "  --site <domain>        DataDog site domain (default: datadoghq.com)")
 	fmt.Fprintln(w, "                           Env override: DDCTL_SITE")
-	fmt.Fprintln(w, "  --timeout <duration>   Timeout per command (default: 30s)")
+	fmt.Fprintln(w, "  --timeout <duration>   Per-command deadline (default: 30s; enforced via request context)")
 	fmt.Fprintln(w, "  --json                 JSON output")
 	fmt.Fprintln(w, "  --debug                Debug logging")
 }

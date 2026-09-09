@@ -35,7 +35,8 @@ Flags:
   --to <time>              End time (default: now)
   --sources <csv>          Filter by event sources
   --tags <csv>             Filter by tags (e.g. env:prod,service:api)
-  --limit <n>              Max events to return (default: 50)
+  --limit <n>              Max events per page or total with --all (default: 50)
+  --all                    Auto-paginate until --limit or end of results
   --cursor <value>         Pagination cursor from a prior result
   --count-only             Return hit_count only
 

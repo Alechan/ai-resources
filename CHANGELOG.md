@@ -44,6 +44,10 @@
 
 - **Breaking:** removed `logs-query`, `metrics-query`, and `events-list`; use
   `ddctl logs query`, `ddctl metrics query`, and `ddctl events list`
+- HTTP client uses request context for deadlines (removed duplicate `http.Client.Timeout`)
+- CSRF body token injection limited to mutation and logs-analytics paths
+- GET requests retry on HTTP 429/503 (up to 2 retries; logged with `--debug`)
+- `ddctl events list --all` auto-paginates like `logs query --all`
 - Shared mutation helpers for dashboard/monitor/notebook update dry-run and
   `--if-unmodified-since` checks (`internal/service/mutation.go`, `jsonutil.go`)
 - **Breaking:** removed `--allow-empty-series` from dashboards and notebooks

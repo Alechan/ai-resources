@@ -397,7 +397,7 @@ func TestExecute_QueryGroupsHelp(t *testing.T) {
 		{
 			name: "events list help",
 			args: []string{"events", "list", "--help"},
-			shouldContain: []string{"ddctl events list", "--count-only"},
+			shouldContain: []string{"ddctl events list", "--count-only", "--all"},
 		},
 	}
 	for _, tc := range tests {

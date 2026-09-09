@@ -44,6 +44,8 @@ type EventsListResult struct {
 	NextCursor    string   `json:"next_cursor,omitempty"`
 	HitCount      int      `json:"hit_count"`
 	ReturnedCount int      `json:"returned_count"`
+	Truncated     bool     `json:"truncated,omitempty"`
+	Limit         int      `json:"limit,omitempty"`
 	Warnings      []string `json:"warnings,omitempty"`
 }
 

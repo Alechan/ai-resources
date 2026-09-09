@@ -116,7 +116,7 @@ Commands:
 Global flags:
   --site <domain>        DataDog site domain (default: datadoghq.com)
                            Env override: DDCTL_SITE
-  --timeout <duration>   Timeout per command (default: 30s)
+  --timeout <duration>   Per-command deadline (default: 30s; enforced via request context)
   --json                 JSON output
   --debug                Debug logging
 ```
@@ -241,6 +241,7 @@ ddctl events list --from now-2h
 ddctl events list --from now-4h --tags env:prod --json
 ddctl events list --from now-1h --sources containerd,kubernetes --limit 20
 ddctl events list --from now-1h --count-only --json
+ddctl events list --all --limit 200
 ddctl events list --cursor '<next_cursor value>'
 ```
 

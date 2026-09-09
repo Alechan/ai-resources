@@ -204,6 +204,8 @@ const helpDashboardsList = `Usage:
 
 List dashboards from GET /api/v1/dashboard.
 
+Note: loads the full dashboard list from Datadog; use --limit to cap output.
+
 Flags:
   --limit <n>   Return at most n dashboards (default: all)
 

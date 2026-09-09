@@ -146,6 +146,7 @@ ddctl events list --from now-2h
 ddctl events list --from now-4h --tags env:prod
 ddctl events list --from now-1h --sources containerd,kubernetes --limit 20
 ddctl events list --from now-1h --count-only --json
+ddctl events list --from now-1h --all --limit 200
 ddctl events list --cursor '<next_cursor value>'
 ```
 

@@ -24,7 +24,8 @@ type Services struct {
 }
 
 func NewServices(cfg Config) Services {
-	httpClient := &http.Client{Timeout: cfg.Timeout}
+	// Per-request deadlines come from context.WithTimeout in cmd/ddctl.Execute.
+	httpClient := &http.Client{}
 	authProvider := auth.NewKeychainProvider(cfg.Site)
 	ddClient := datadogapi.NewClient(httpClient, cfg.Site, authProvider)
 	metricsSvc := service.NewMetricsQueryService(ddClient)
