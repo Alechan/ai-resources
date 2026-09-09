@@ -27,8 +27,8 @@ func TestRunDashboardsCmd_MissingSubcommand(t *testing.T) {
 	if code != fail.CodeValidation {
 		t.Fatalf("code = %d, want %d; stderr=%s", code, fail.CodeValidation, stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "get|validate|create|update") {
-		t.Fatalf("stderr = %q, want usage listing get|validate|create|update", stderr.String())
+	if !strings.Contains(stderr.String(), "get|list|search|validate|create|update|clone|delete") {
+		t.Fatalf("stderr = %q, want usage listing subcommands", stderr.String())
 	}
 }
 
@@ -37,7 +37,7 @@ func TestRunDashboardsCmd_UnknownSubcommand(t *testing.T) {
 
 	cfg := app.NewConfig("datadoghq.com", 10*time.Second, false, false)
 	var stdout, stderr bytes.Buffer
-	code := runDashboardsCmd(context.Background(), app.Services{}, cfg, []string{"clone"}, &stdout, &stderr)
+	code := runDashboardsCmd(context.Background(), app.Services{}, cfg, []string{"purge"}, &stdout, &stderr)
 	if code != fail.CodeValidation {
 		t.Fatalf("code = %d, want %d; stderr=%s", code, fail.CodeValidation, stderr.String())
 	}

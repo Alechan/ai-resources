@@ -26,7 +26,7 @@ func runLogsQueryCmd(ctx context.Context, svcs app.Services, cfg app.Config, arg
 
 	if err := fs.Parse(args); err != nil {
 		err = fail.NewValidation(err.Error(), "usage: ddctl logs-query [flags]")
-		writeError(stderr, err)
+		writeError(stderr, err, cfg)
 		return fail.ExitCode(err)
 	}
 
@@ -37,14 +37,14 @@ func runLogsQueryCmd(ctx context.Context, svcs app.Services, cfg app.Config, arg
 
 	if *limit < 1 || *limit > 1000 {
 		err := fail.NewValidation("--limit must be between 1 and 1000", "provide a value between 1 and 1000")
-		writeError(stderr, err)
+		writeError(stderr, err, cfg)
 		return fail.ExitCode(err)
 	}
 
 	if *countOnly {
 		if *cursor != "" {
 			err := fail.NewValidation("--cursor cannot be used with --count-only", "remove --cursor from count-only queries")
-			writeError(stderr, err)
+			writeError(stderr, err, cfg)
 			return fail.ExitCode(err)
 		}
 		return runLogsQueryCountOnly(ctx, svcs, cfg, stdout, stderr, *query, *from, *to)
@@ -64,13 +64,13 @@ func runLogsQueryCmd(ctx context.Context, svcs app.Services, cfg app.Config, arg
 
 	result, err := svcs.LogsQuery.Run(ctx, input)
 	if err != nil {
-		writeError(stderr, err)
+		writeError(stderr, err, cfg)
 		return fail.ExitCode(err)
 	}
 
 	if cfg.JSON {
 		if err := svcs.Output.JSON(stdout, result); err != nil {
-			writeError(stderr, fail.NewAPI(err.Error(), "unable to encode logs result", ""))
+			writeError(stderr, fail.NewAPI(err.Error(), "unable to encode logs result", ""), cfg)
 			return fail.CodeAPI
 		}
 		return fail.CodeOK
@@ -98,7 +98,7 @@ func runLogsQueryCountOnly(ctx context.Context, svcs app.Services, cfg app.Confi
 	}
 	result, err := svcs.LogsQuery.Run(ctx, input)
 	if err != nil {
-		writeError(stderr, err)
+		writeError(stderr, err, cfg)
 		return fail.ExitCode(err)
 	}
 	out := struct {
@@ -119,7 +119,7 @@ func runLogsQueryCountOnly(ctx context.Context, svcs app.Services, cfg app.Confi
 
 	if cfg.JSON {
 		if err := svcs.Output.JSON(stdout, out); err != nil {
-			writeError(stderr, fail.NewAPI(err.Error(), "unable to encode logs result", ""))
+			writeError(stderr, fail.NewAPI(err.Error(), "unable to encode logs result", ""), cfg)
 			return fail.CodeAPI
 		}
 		return fail.CodeOK
@@ -162,7 +162,7 @@ func runLogsQueryAll(ctx context.Context, svcs app.Services, cfg app.Config, std
 		}
 		result, err := svcs.LogsQuery.Run(ctx, input)
 		if err != nil {
-			writeError(stderr, err)
+			writeError(stderr, err, cfg)
 			return fail.ExitCode(err)
 		}
 		if result.HitCount > hitCount {
@@ -198,7 +198,7 @@ func runLogsQueryAll(ctx context.Context, svcs app.Services, cfg app.Config, std
 
 	if cfg.JSON {
 		if err := svcs.Output.JSON(stdout, combined); err != nil {
-			writeError(stderr, fail.NewAPI(err.Error(), "unable to encode logs result", ""))
+			writeError(stderr, fail.NewAPI(err.Error(), "unable to encode logs result", ""), cfg)
 			return fail.CodeAPI
 		}
 		return fail.CodeOK

@@ -22,7 +22,7 @@ func runMetricsQueryCmd(ctx context.Context, svcs app.Services, cfg app.Config, 
 	raw := fs.Bool("raw", false, "include full pointlist in JSON output (default: summary stats only)")
 
 	if err := fs.Parse(args); err != nil {
-		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl metrics-query --query <query> [flags]"))
+		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl metrics-query --query <query> [flags]"), cfg)
 		return fail.CodeValidation
 	}
 
@@ -32,7 +32,7 @@ func runMetricsQueryCmd(ctx context.Context, svcs app.Services, cfg app.Config, 
 	}
 
 	if *query == "" {
-		writeError(stderr, fail.NewValidation("--query is required", `example: ddctl metrics-query --query "avg:system.cpu.user{service:tapir}"`))
+		writeError(stderr, fail.NewValidation("--query is required", `example: ddctl metrics-query --query "avg:system.cpu.user{service:tapir}"`), cfg)
 		return fail.CodeValidation
 	}
 
@@ -44,7 +44,7 @@ func runMetricsQueryCmd(ctx context.Context, svcs app.Services, cfg app.Config, 
 
 	result, err := svcs.MetricsQuery.Run(ctx, input)
 	if err != nil {
-		writeError(stderr, err)
+		writeError(stderr, err, cfg)
 		return fail.ExitCode(err)
 	}
 
@@ -60,7 +60,7 @@ func runMetricsQueryCmd(ctx context.Context, svcs app.Services, cfg app.Config, 
 			out.Series = stripped
 		}
 		if err := svcs.Output.JSON(stdout, out); err != nil {
-			writeError(stderr, fail.NewAPI(err.Error(), "unable to encode metrics result", ""))
+			writeError(stderr, fail.NewAPI(err.Error(), "unable to encode metrics result", ""), cfg)
 			return fail.CodeAPI
 		}
 		return fail.CodeOK

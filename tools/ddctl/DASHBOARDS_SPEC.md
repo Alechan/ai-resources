@@ -94,9 +94,29 @@ Safety:
 - `--dry-run` GETs current, prints a semantic diff, and does not PUT.
 - `--diff` prints the same semantic diff (and still PUTs unless
   `--dry-run` is also set).
-- `--if-unmodified-since` / `--expected-modified-at` GET current and
+- `--if-unmodified-since` GET current and
   abort if `modified_at` does not match (Datadog has no If-Match).
 - Run validate unless `--skip-validate`.
+
+### 5) `ddctl dashboards list [--limit <n>]`
+
+List dashboards via `GET /api/v1/dashboard`.
+
+Text output: ID, title, URL per row. JSON: `{"dashboards":[...]}`.
+
+### 6) `ddctl dashboards search [--title <substr>] [--tag <tag>] [--limit <n>]`
+
+Client-side filter after listing all dashboards. At least one of
+`--title` or `--tag` is required. Warns when `--limit` truncates results.
+
+### 7) `ddctl dashboards clone <id> --title <title> [--dry-run]`
+
+Compose get → strip identity → create with the required `--title`.
+
+### 8) `ddctl dashboards delete <id> --confirm <id>`
+
+Hard delete via `DELETE /api/v1/dashboard/{id}`. `--confirm` must equal
+the dashboard ID exactly.
 
 Semantic diff example:
 

@@ -264,7 +264,7 @@ func TestDashboardsUpdate_ExpectedModifiedAtMismatch(t *testing.T) {
 	_, err := svc.Update(context.Background(), DashboardMutationInput{
 		FilePath:           file,
 		ID:                 "cec-7ix-73w",
-		ExpectedModifiedAt: "2020-01-01T00:00:00Z",
+		IfUnmodifiedSince: "2020-01-01T00:00:00Z",
 		SkipValidate:       true,
 	}, true)
 	if err == nil || !strings.Contains(err.Error(), "modified_at") {
@@ -296,7 +296,7 @@ func TestDashboardsUpdate_ExpectedModifiedAtMatch(t *testing.T) {
 	_, err := svc.Update(context.Background(), DashboardMutationInput{
 		FilePath:           file,
 		ID:                 "cec-7ix-73w",
-		ExpectedModifiedAt: "2026-09-09T01:00:00Z",
+		IfUnmodifiedSince: "2026-09-09T01:00:00Z",
 		SkipValidate:       true,
 	}, true)
 	if err != nil {
@@ -465,5 +465,105 @@ func TestDashboardsValidate_SkipsUnknownDataSource(t *testing.T) {
 	}
 	if httpCalled {
 		t.Fatal("should not preflight skipped widgets")
+	}
+}
+
+func TestDashboardsList_WrappedResponse(t *testing.T) {
+	t.Parallel()
+	dd := testDashClient(dashRoundTripper(func(req *http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusOK, `{"dashboards":[
+  {"id":"abc-def-ghi","title":"One","author_handle":"a@x.com","modified_at":"2026-01-01T00:00:00Z"},
+  {"id":"jkl-mno-pqr","title":"Two"}
+]}`), nil
+	}))
+	svc := NewDashboardsService(dd, nil, nil, "datadoghq.com")
+	got, err := svc.List(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("len = %d", len(got))
+	}
+}
+
+func TestDashboardsList_LimitAndURL(t *testing.T) {
+	t.Parallel()
+	dd := testDashClient(dashRoundTripper(func(req *http.Request) (*http.Response, error) {
+		if req.URL.Path != "/api/v1/dashboard" {
+			t.Fatalf("path = %s", req.URL.Path)
+		}
+		return jsonResponse(http.StatusOK, `[
+  {"id":"abc-def-ghi","title":"One","author_handle":"a@x.com","modified_at":"2026-01-01T00:00:00Z"},
+  {"id":"jkl-mno-pqr","title":"Two"}
+]`), nil
+	}))
+	svc := NewDashboardsService(dd, nil, nil, "datadoghq.com")
+	got, err := svc.List(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("len = %d", len(got))
+	}
+	if got[0]["url"] != "https://app.datadoghq.com/dashboard/abc-def-ghi" {
+		t.Fatalf("url = %v", got[0]["url"])
+	}
+}
+
+func TestDashboardsSearch_FiltersTitleAndTag(t *testing.T) {
+	t.Parallel()
+	dd := testDashClient(dashRoundTripper(func(req *http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusOK, `[
+  {"id":"a","title":"DELETE ME ddctl-dev","tags":["team:platform"]},
+  {"id":"b","title":"Other","tags":["team:other"]}
+]`), nil
+	}))
+	svc := NewDashboardsService(dd, nil, nil, "datadoghq.com")
+	got, err := svc.Search(context.Background(), "ddctl-dev", "team:platform", 0)
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(got) != 1 || got[0]["id"] != "a" {
+		t.Fatalf("got = %#v", got)
+	}
+}
+
+func TestDashboardsDelete_RequiresConfirm(t *testing.T) {
+	t.Parallel()
+	svc := NewDashboardsService(nil, nil, nil, "datadoghq.com")
+	_, err := svc.Delete(context.Background(), DashboardDeleteInput{ID: "abc-def-ghi", Confirm: "wrong"})
+	if err == nil || !strings.Contains(err.Error(), "confirm") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestDashboardsDelete_CallsDeleteEndpoint(t *testing.T) {
+	t.Parallel()
+	deleteCalled := false
+	dd := testDashClient(dashRoundTripper(func(req *http.Request) (*http.Response, error) {
+		switch req.Method {
+		case http.MethodGet:
+			return jsonResponse(http.StatusOK, `{"id":"abc-def-ghi","title":"DELETE ME ddctl-dev","url":"https://app.datadoghq.com/dashboard/abc-def-ghi"}`), nil
+		case http.MethodDelete:
+			deleteCalled = true
+			if req.URL.Path != "/api/v1/dashboard/abc-def-ghi" {
+				t.Fatalf("path = %s", req.URL.Path)
+			}
+			return jsonResponse(http.StatusOK, `{}`), nil
+		default:
+			t.Fatalf("method = %s", req.Method)
+			return nil, nil
+		}
+	}))
+	svc := NewDashboardsService(dd, nil, nil, "datadoghq.com")
+	got, err := svc.Delete(context.Background(), DashboardDeleteInput{ID: "abc-def-ghi", Confirm: "abc-def-ghi"})
+	if err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if !deleteCalled {
+		t.Fatal("DELETE not called")
+	}
+	if got["deleted"] != true {
+		t.Fatalf("deleted = %v", got["deleted"])
 	}
 }

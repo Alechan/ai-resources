@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -16,7 +17,7 @@ import (
 func Execute(args []string, stdout, stderr io.Writer) int {
 	opts, cmd, cmdArgs, err := parseRootArgs(args)
 	if err != nil {
-		writeError(stderr, err)
+		writeError(stderr, err, app.Config{JSON: opts.json})
 		return fail.ExitCode(err)
 	}
 	if opts.help {
@@ -38,6 +39,9 @@ func Execute(args []string, stdout, stderr io.Writer) int {
 
 	cfg := app.NewConfig(opts.site, opts.timeout, opts.json, opts.debug)
 	svcs := app.NewServices(cfg)
+	if cfg.Debug {
+		svcs.SetDebug(stderr)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.Timeout)
 	defer cancel()
 
@@ -48,10 +52,8 @@ func Execute(args []string, stdout, stderr io.Writer) int {
 		return runDoctorCmd(ctx, svcs, cfg, cmdArgs, stdout, stderr)
 	case "logs-query":
 		return runLogsQueryCmd(ctx, svcs, cfg, cmdArgs, stdout, stderr)
-	case "monitors-list":
-		return runMonitorsListCmd(ctx, svcs, cfg, cmdArgs, stdout, stderr)
-	case "monitors-get":
-		return runMonitorsGetCmd(ctx, svcs, cfg, cmdArgs, stdout, stderr)
+	case "monitors":
+		return runMonitorsCmd(ctx, svcs, cfg, cmdArgs, stdout, stderr)
 	case "events-list":
 		return runEventsListCmd(ctx, svcs, cfg, cmdArgs, stdout, stderr)
 	case "metrics-query":
@@ -61,8 +63,8 @@ func Execute(args []string, stdout, stderr io.Writer) int {
 	case "dashboards":
 		return runDashboardsCmd(ctx, svcs, cfg, cmdArgs, stdout, stderr)
 	default:
-		err := fail.NewValidation("unknown command", "use one of: init, doctor, logs-query, monitors-list, monitors-get, events-list, metrics-query, notebooks, dashboards")
-		writeError(stderr, err)
+		err := fail.NewValidation("unknown command", "use one of: init, doctor, logs-query, monitors, events-list, metrics-query, notebooks, dashboards")
+		writeError(stderr, err, cfg)
 		return fail.ExitCode(err)
 	}
 }
@@ -135,12 +137,11 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  init            Store DataDog session cookies from a cURL command or raw cookie string")
 	fmt.Fprintln(w, "  doctor          Check credentials, DataDog auth, and reachability")
 	fmt.Fprintln(w, "  logs-query      Query DataDog logs")
-	fmt.Fprintln(w, "  monitors-list   List DataDog monitors")
-	fmt.Fprintln(w, "  monitors-get    Get a specific DataDog monitor by ID")
+	fmt.Fprintln(w, "  monitors        Manage DataDog monitors (list/get/validate/create/update/mute/unmute)")
 	fmt.Fprintln(w, "  events-list     List DataDog events")
 	fmt.Fprintln(w, "  metrics-query   Query DataDog timeseries metrics")
 	fmt.Fprintln(w, "  notebooks       Manage DataDog notebooks (get/create/update/validate)")
-	fmt.Fprintln(w, "  dashboards      Manage DataDog dashboards (get/create/update/validate)")
+	fmt.Fprintln(w, "  dashboards      Manage DataDog dashboards (get/list/search/create/update/validate/clone/delete)")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Global flags:")
 	fmt.Fprintln(w, "  --site <domain>        DataDog site domain (default: datadoghq.com)")
@@ -150,8 +151,14 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  --debug                Debug logging")
 }
 
-func writeError(w io.Writer, err error) {
+func writeError(w io.Writer, err error, cfg app.Config) {
 	var e *fail.Error
+	if cfg.JSON && errors.As(err, &e) {
+		enc := json.NewEncoder(w)
+		enc.SetIndent("", "  ")
+		_ = enc.Encode(e.Envelope())
+		return
+	}
 	if errors.As(err, &e) {
 		if e.Action == "" {
 			fmt.Fprintf(w, "Error [%s]: %s\n", e.Category, e.Message)

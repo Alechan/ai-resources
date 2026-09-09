@@ -26,7 +26,7 @@ func runEventsListCmd(ctx context.Context, svcs app.Services, cfg app.Config, ar
 	countOnly := fs.Bool("count-only", false, "return only the hit count, no event data")
 
 	if err := fs.Parse(args); err != nil {
-		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl events-list [flags]"))
+		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl events-list [flags]"), cfg)
 		return fail.CodeValidation
 	}
 
@@ -42,13 +42,13 @@ func runEventsListCmd(ctx context.Context, svcs app.Services, cfg app.Config, ar
 
 	result, err := svcs.EventsList.Run(ctx, input)
 	if err != nil {
-		writeError(stderr, err)
+		writeError(stderr, err, cfg)
 		return fail.ExitCode(err)
 	}
 
 	if cfg.JSON {
 		if err := svcs.Output.JSON(stdout, result); err != nil {
-			writeError(stderr, fail.NewAPI(err.Error(), "unable to encode events result", ""))
+			writeError(stderr, fail.NewAPI(err.Error(), "unable to encode events result", ""), cfg)
 			return fail.CodeAPI
 		}
 		return fail.CodeOK

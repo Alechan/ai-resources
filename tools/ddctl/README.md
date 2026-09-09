@@ -107,12 +107,11 @@ Commands:
   init            Store DataDog session cookies from a cURL file or stdin
   doctor          Check credentials, DataDog auth, and reachability
   logs-query      Query DataDog logs
-  monitors-list   List DataDog monitors
-  monitors-get    Get a specific DataDog monitor by ID
+  monitors        Manage DataDog monitors (list/get/validate/create/update/mute/unmute)
   events-list     List DataDog events
   metrics-query   Query DataDog timeseries metrics
   notebooks       Manage DataDog notebooks (get/create/update/validate)
-  dashboards      Manage DataDog dashboards (get/create/update/validate)
+  dashboards      Manage DataDog dashboards (get/list/search/create/update/validate/clone/delete)
 
 Global flags:
   --site <domain>        DataDog site domain (default: datadoghq.com)
@@ -190,24 +189,35 @@ Notes:
   - `limit`
   - `hit_count` (when available)
 
-### monitors-list
+### monitors
 
-List all DataDog monitors.
-
-```bash
-ddctl monitors-list
-ddctl monitors-list --tag env:prod
-ddctl monitors-list --json
-```
-
-### monitors-get
-
-Fetch a specific monitor by ID.
+Manage DataDog monitors through browser-authenticated API endpoints.
 
 ```bash
-ddctl monitors-get 12345678
-ddctl monitors-get 12345678 --json
+# List monitors
+ddctl monitors list
+ddctl monitors list --tag env:prod
+ddctl --json monitors list
+
+# Get monitor (raw JSON includes options for round-trip create/update)
+ddctl monitors get 12345678
+ddctl --json monitors get 12345678 > monitor.json
+
+# Validate, create, update
+ddctl monitors validate --from-file monitor.json
+ddctl monitors create --from-file monitor.json --dry-run
+ddctl monitors update 12345678 --from-file monitor.json --replace-all
+
+# Mute / unmute
+ddctl monitors mute 12345678
+ddctl monitors mute 12345678 --until "2026-09-10T12:00:00Z"
+ddctl monitors unmute 12345678 --confirm 12345678   # required for env:prod monitors
 ```
+
+Text list output: `[id] state type name tags:…`
+
+Production monitors (tags `env:prod` or `env:production`) require
+`--confirm <id>` on unmute.
 
 ### events-list
 
@@ -302,6 +312,16 @@ ddctl dashboards validate --from-file dashboard.json --from now-4h --template-va
 ddctl dashboards create --from-file dashboard.json --title "DELETE ME ddctl-dev copy" --dry-run
 ddctl dashboards update cec-7ix-73w --from-file dashboard.json --replace-all --dry-run
 
+# List and search dashboards
+ddctl dashboards list
+ddctl dashboards list --limit 20
+ddctl dashboards search --title "DELETE ME ddctl-dev"
+ddctl dashboards search --tag team:platform --limit 10
+
+# Clone and delete (mutating)
+ddctl dashboards clone cec-7ix-73w --title "DELETE ME ddctl-dev copy" --dry-run
+ddctl dashboards delete abc-def-ghi --confirm abc-def-ghi
+
 # Create from a previous get (identity fields are stripped)
 ddctl dashboards create --from-file dashboard.json --title "DELETE ME ddctl-dev copy"
 
@@ -318,8 +338,10 @@ Notes:
 - `update` is full replacement (`PUT`), not patch.
 - `--replace-all` is mandatory for update.
 - Create/update run validate unless `--skip-validate`.
-- `--dry-run` on create/update does not write. `--diff` prints a semantic diff.
-- `--if-unmodified-since` (alias `--expected-modified-at`) aborts if the remote `modified_at` does not match.
+- `--dry-run` on create/update/clone does not write. `--diff` prints a semantic diff.
+- `--if-unmodified-since` aborts if the remote `modified_at` does not match.
+- `--json` prints structured error envelopes on failure (validation includes widget/query fields when known).
+- `--debug` logs HTTP method/path/status only; never prints cookies, CSRF tokens, or log bodies.
 - Query preflight covers metrics (including formulas), logs (`query` / `query_string` / `search.query`), and monitor IDs.
 - No-data in the selected window is a warning (exit 0), not a validation failure.
 - Other data sources warn and skip.

@@ -35,13 +35,13 @@ func runInitCmd(ctx context.Context, svcs app.Services, cfg app.Config, args []s
 	curlFile := fs.String("curl-file", "", "path to file containing cURL command")
 
 	if err := fs.Parse(args); err != nil {
-		writeError(stderr, fail.NewValidation(err.Error(), "usage: pbpaste | ddctl init   (or: ddctl init --curl-file PATH, or: ddctl init --clear)"))
+		writeError(stderr, fail.NewValidation(err.Error(), "usage: pbpaste | ddctl init   (or: ddctl init --curl-file PATH, or: ddctl init --clear)"), cfg)
 		return fail.CodeValidation
 	}
 
 	if *clear {
 		if err := svcs.Auth.Delete(); err != nil {
-			writeError(stderr, fail.NewAuth(err.Error(), ""))
+			writeError(stderr, fail.NewAuth(err.Error(), ""), cfg)
 			return fail.CodeAuth
 		}
 		fmt.Fprintln(stdout, "credentials cleared")
@@ -56,7 +56,7 @@ func runInitCmd(ctx context.Context, svcs app.Services, cfg app.Config, args []s
 	// Read cURL from file
 	curlData, err := os.ReadFile(*curlFile)
 	if err != nil {
-		writeError(stderr, fail.NewValidation(err.Error(), "ensure file exists and is readable"))
+		writeError(stderr, fail.NewValidation(err.Error(), "ensure file exists and is readable"), cfg)
 		return fail.CodeValidation
 	}
 
@@ -77,7 +77,7 @@ func initFromStdinWithDetector(ctx context.Context, svcs app.Services, cfg app.C
 
 	data, err := io.ReadAll(stdin)
 	if err != nil {
-		writeError(stderr, fail.NewValidation(err.Error(), "unable to read stdin"))
+		writeError(stderr, fail.NewValidation(err.Error(), "unable to read stdin"), cfg)
 		return fail.CodeValidation
 	}
 
@@ -103,7 +103,7 @@ func initFromCurl(ctx context.Context, svcs app.Services, cfg app.Config, curlCm
 	// Extract cookie and CSRF token from cURL
 	cookieStr, err := curl.ExtractCookieHeader(curlCmd)
 	if err != nil {
-		writeError(stderr, fail.NewValidation(err.Error(), "ensure the cURL command includes a Cookie header or -b flag"))
+		writeError(stderr, fail.NewValidation(err.Error(), "ensure the cURL command includes a Cookie header or -b flag"), cfg)
 		return fail.CodeValidation
 	}
 
@@ -120,20 +120,20 @@ func initFromCurl(ctx context.Context, svcs app.Services, cfg app.Config, curlCm
 	}
 
 	if err := validateInitAuthMaterial(sanitized); err != nil {
-		writeError(stderr, fail.NewValidation(err.Error(), "provide a fresh cURL command from Chrome DevTools"))
+		writeError(stderr, fail.NewValidation(err.Error(), "provide a fresh cURL command from Chrome DevTools"), cfg)
 		return fail.CodeValidation
 	}
 
 	// Store credentials
 	if err := svcs.Auth.Store(sanitized); err != nil {
-		writeError(stderr, fail.NewAuth(err.Error(), "ensure you have access to the macOS Keychain"))
+		writeError(stderr, fail.NewAuth(err.Error(), "ensure you have access to the macOS Keychain"), cfg)
 		return fail.CodeAuth
 	}
 
 	// Show stored count and run doctor
 	cookies, err := svcs.Auth.Cookies()
 	if err != nil {
-		writeError(stderr, fail.NewAuth(err.Error(), ""))
+		writeError(stderr, fail.NewAuth(err.Error(), ""), cfg)
 		return fail.CodeAuth
 	}
 	count := len(cookies)
@@ -145,7 +145,7 @@ func initFromCurl(ctx context.Context, svcs app.Services, cfg app.Config, curlCm
 		}{Site: cfg.Site, CookiesStored: count}
 		enc := json.NewEncoder(stdout)
 		if encErr := enc.Encode(out); encErr != nil {
-			writeError(stderr, fail.NewAPI(encErr.Error(), "unable to encode init result", ""))
+			writeError(stderr, fail.NewAPI(encErr.Error(), "unable to encode init result", ""), cfg)
 			return fail.CodeAPI
 		}
 		return fail.CodeOK

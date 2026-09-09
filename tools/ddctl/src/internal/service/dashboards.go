@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -28,7 +29,7 @@ type DashboardMutationInput struct {
 	To                 string
 	DryRun             bool
 	ShowDiff           bool
-	ExpectedModifiedAt string
+	IfUnmodifiedSince string
 	TemplateVariables  map[string]string
 }
 
@@ -131,16 +132,16 @@ func (s *DashboardsService) Update(ctx context.Context, input DashboardMutationI
 		}
 	}
 
-	needGet := strings.TrimSpace(input.ExpectedModifiedAt) != "" || input.DryRun || input.ShowDiff
+	needGet := strings.TrimSpace(input.IfUnmodifiedSince) != "" || input.DryRun || input.ShowDiff
 	var semantic string
 	if needGet {
 		current, err := s.Get(ctx, DashboardGetInput{ID: input.ID})
 		if err != nil {
 			return nil, err
 		}
-		if strings.TrimSpace(input.ExpectedModifiedAt) != "" {
+		if strings.TrimSpace(input.IfUnmodifiedSince) != "" {
 			got := fmt.Sprint(current["modified_at"])
-			if !modifiedAtMatches(got, input.ExpectedModifiedAt) {
+			if !modifiedAtMatches(got, input.IfUnmodifiedSince) {
 				return nil, fail.NewValidation(
 					"dashboard modified_at does not match --if-unmodified-since",
 					fmt.Sprintf("remote modified_at is %s", got),
@@ -302,7 +303,162 @@ func wrapQueryError(q DashboardQuery, err error) error {
 	if errors.As(err, &e) && (e.Category == "auth" || e.Category == "network") {
 		return err
 	}
-	return fail.NewValidation(queryWarning(q, "invalid query: "+err.Error()), "fix the query on the named widget")
+	return fail.NewQueryValidation(
+		"dashboard",
+		q.WidgetIndex,
+		q.WidgetTitle,
+		q.QueryIndex,
+		queryWarning(q, "invalid query: "+err.Error()),
+		"fix the query on the named widget",
+	)
+}
+
+func (s *DashboardsService) List(ctx context.Context, limit int) ([]map[string]any, error) {
+	var body json.RawMessage
+	if err := s.dd.Get(ctx, "/api/v1/dashboard", &body); err != nil {
+		return nil, err
+	}
+	raw, err := parseDashboardListItems(body)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]map[string]any, 0, len(raw))
+	for _, item := range raw {
+		id := dashboardIDFrom(item)
+		if id == "" {
+			continue
+		}
+		entry := map[string]any{
+			"id":    id,
+			"title": item["title"],
+			"url":   dashboardCanonicalURL(s.site, id),
+		}
+		if author, ok := item["author_handle"]; ok {
+			entry["author_handle"] = author
+		}
+		if modified, ok := item["modified_at"]; ok {
+			entry["modified_at"] = modified
+		}
+		if tags, ok := item["tags"]; ok {
+			entry["tags"] = tags
+		}
+		out = append(out, entry)
+		if limit > 0 && len(out) >= limit {
+			break
+		}
+	}
+	return out, nil
+}
+
+func parseDashboardListItems(body []byte) ([]map[string]any, error) {
+	var direct []map[string]any
+	if err := json.Unmarshal(body, &direct); err == nil {
+		return direct, nil
+	}
+	var wrapped struct {
+		Dashboards []map[string]any `json:"dashboards"`
+	}
+	if err := json.Unmarshal(body, &wrapped); err != nil {
+		return nil, fail.NewAPI("failed to decode dashboard list", "check API response shape", "")
+	}
+	return wrapped.Dashboards, nil
+}
+
+func (s *DashboardsService) Search(ctx context.Context, titleSubstr, tag string, limit int) ([]map[string]any, error) {
+	all, err := s.List(ctx, 0)
+	if err != nil {
+		return nil, err
+	}
+	var out []map[string]any
+	for _, item := range all {
+		if titleSubstr != "" {
+			title, _ := item["title"].(string)
+			if !strings.Contains(strings.ToLower(title), strings.ToLower(titleSubstr)) {
+				continue
+			}
+		}
+		if tag != "" && !dashboardHasTag(item["tags"], tag) {
+			continue
+		}
+		out = append(out, item)
+		if limit > 0 && len(out) >= limit {
+			break
+		}
+	}
+	return out, nil
+}
+
+func dashboardHasTag(raw any, want string) bool {
+	tags, ok := raw.([]any)
+	if !ok {
+		return false
+	}
+	for _, item := range tags {
+		if s, ok := item.(string); ok && s == want {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *DashboardsService) Clone(ctx context.Context, sourceID, title string, input DashboardMutationInput) (DashboardMutationResult, error) {
+	source, err := s.Get(ctx, DashboardGetInput{ID: sourceID})
+	if err != nil {
+		return nil, err
+	}
+	file, err := writeTempDashboard(source)
+	if err != nil {
+		return nil, err
+	}
+	input.FilePath = file
+	input.Title = title
+	return s.Create(ctx, input)
+}
+
+func writeTempDashboard(payload map[string]any) (string, error) {
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return "", fail.NewValidation("unable to serialize dashboard", err.Error())
+	}
+	f, err := os.CreateTemp("", "ddctl-dashboard-*.json")
+	if err != nil {
+		return "", fail.NewValidation("unable to create temp file", err.Error())
+	}
+	defer f.Close()
+	if _, err := f.Write(b); err != nil {
+		return "", fail.NewValidation("unable to write temp file", err.Error())
+	}
+	return f.Name(), nil
+}
+
+type DashboardDeleteInput struct {
+	ID      string
+	Confirm string
+}
+
+func (s *DashboardsService) Delete(ctx context.Context, input DashboardDeleteInput) (map[string]any, error) {
+	id := strings.TrimSpace(input.ID)
+	if id == "" {
+		return nil, fail.NewValidation("missing dashboard ID", "usage: ddctl dashboards delete <id> --confirm <id>")
+	}
+	if strings.TrimSpace(input.Confirm) != id {
+		return nil, fail.NewValidation("--confirm must equal dashboard ID", fmt.Sprintf("pass --confirm %s", id))
+	}
+	current, err := s.Get(ctx, DashboardGetInput{ID: id})
+	if err != nil {
+		return nil, err
+	}
+	path := fmt.Sprintf("/api/v1/dashboard/%s", id)
+	var deleted map[string]any
+	if err := s.dd.Delete(ctx, path, &deleted); err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"id":      id,
+		"title":   current["title"],
+		"url":     current["url"],
+		"deleted": true,
+	}, nil
 }
 
 func loadDashboardEnvelopeFromFile(path string) (map[string]any, error) {

@@ -20,10 +20,8 @@ func printCommandHelp(w io.Writer, cmd string, args []string) {
 		fmt.Fprint(w, helpDoctor)
 	case "logs-query":
 		fmt.Fprint(w, helpLogsQuery)
-	case "monitors-list":
-		fmt.Fprint(w, helpMonitorsList)
-	case "monitors-get":
-		fmt.Fprint(w, helpMonitorsGet)
+	case "monitors":
+		printMonitorsHelp(w, args)
 	case "events-list":
 		fmt.Fprint(w, helpEventsList)
 	case "metrics-query":
@@ -87,29 +85,6 @@ Exit codes:
   0  success
   2  validation / usage error
   3  authentication failure
-`
-
-const helpMonitorsList = `Usage:
-  ddctl monitors-list [--tag <tag>]
-
-List DataDog monitors.
-
-Exit codes:
-  0  success
-  2  validation / usage error
-`
-
-const helpMonitorsGet = `Usage:
-  ddctl monitors-get <id>
-
-Get a DataDog monitor by numeric ID.
-
-Positional arguments:
-  id    Monitor ID
-
-Exit codes:
-  0  success
-  2  validation / usage error
 `
 
 const helpEventsList = `Usage:

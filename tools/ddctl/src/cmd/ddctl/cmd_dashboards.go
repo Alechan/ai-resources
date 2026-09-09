@@ -37,35 +37,31 @@ func parseTemplateVariableFlags(pairs []string) (map[string]string, error) {
 	return out, nil
 }
 
-func mergeUnmodifiedSince(expected, ifUnmodified string) (string, error) {
-	expected = strings.TrimSpace(expected)
-	ifUnmodified = strings.TrimSpace(ifUnmodified)
-	if expected != "" && ifUnmodified != "" && expected != ifUnmodified {
-		return "", fail.NewValidation("conflicting concurrency flags", "pass only one of --if-unmodified-since and --expected-modified-at")
-	}
-	if ifUnmodified != "" {
-		return ifUnmodified, nil
-	}
-	return expected, nil
-}
-
 func runDashboardsCmd(ctx context.Context, svcs app.Services, cfg app.Config, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		writeError(stderr, fail.NewValidation("missing dashboards subcommand", "usage: ddctl dashboards <get|validate|create|update> [flags]"))
+		writeError(stderr, fail.NewValidation("missing dashboards subcommand", "usage: ddctl dashboards <get|list|search|validate|create|update|clone|delete> [flags]"), cfg)
 		return fail.CodeValidation
 	}
 
 	switch args[0] {
 	case "get":
 		return runDashboardsGetCmd(ctx, svcs, cfg, args[1:], stdout, stderr)
+	case "list":
+		return runDashboardsListCmd(ctx, svcs, cfg, args[1:], stdout, stderr)
+	case "search":
+		return runDashboardsSearchCmd(ctx, svcs, cfg, args[1:], stdout, stderr)
 	case "create":
 		return runDashboardsCreateCmd(ctx, svcs, cfg, args[1:], stdout, stderr)
 	case "update":
 		return runDashboardsUpdateCmd(ctx, svcs, cfg, args[1:], stdout, stderr)
 	case "validate":
 		return runDashboardsValidateCmd(ctx, svcs, cfg, args[1:], stdout, stderr)
+	case "clone":
+		return runDashboardsCloneCmd(ctx, svcs, cfg, args[1:], stdout, stderr)
+	case "delete":
+		return runDashboardsDeleteCmd(ctx, svcs, cfg, args[1:], stdout, stderr)
 	default:
-		writeError(stderr, fail.NewValidation("unknown dashboards subcommand", "usage: ddctl dashboards <get|validate|create|update> [flags]"))
+		writeError(stderr, fail.NewValidation("unknown dashboards subcommand", "usage: ddctl dashboards <get|list|search|validate|create|update|clone|delete> [flags]"), cfg)
 		return fail.CodeValidation
 	}
 }
@@ -75,7 +71,7 @@ func runDashboardsGetCmd(ctx context.Context, svcs app.Services, cfg app.Config,
 	fs := flag.NewFlagSet("dashboards get", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	if err := fs.Parse(parseArgs); err != nil {
-		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl dashboards get <id>"))
+		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl dashboards get <id>"), cfg)
 		return fail.CodeValidation
 	}
 	dashboardID := leadingID
@@ -83,13 +79,13 @@ func runDashboardsGetCmd(ctx context.Context, svcs app.Services, cfg app.Config,
 		dashboardID = fs.Arg(0)
 	}
 	if dashboardID == "" {
-		writeError(stderr, fail.NewValidation("missing dashboard ID", "usage: ddctl dashboards get <id>"))
+		writeError(stderr, fail.NewValidation("missing dashboard ID", "usage: ddctl dashboards get <id>"), cfg)
 		return fail.CodeValidation
 	}
 
 	result, err := svcs.Dashboards.Get(ctx, service.DashboardGetInput{ID: dashboardID})
 	if err != nil {
-		writeError(stderr, err)
+		writeError(stderr, err, cfg)
 		return fail.ExitCode(err)
 	}
 	return writeDashboardResult(svcs, cfg, stdout, stderr, result)
@@ -108,12 +104,12 @@ func runDashboardsCreateCmd(ctx context.Context, svcs app.Services, cfg app.Conf
 	var tvs repeatableStrings
 	fs.Var(&tvs, "template-variable", "substitute $name.value in queries (name=value, repeatable)")
 	if err := fs.Parse(args); err != nil {
-		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl dashboards create --from-file <path> [--title <title>]"))
+		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl dashboards create --from-file <path> [--title <title>]"), cfg)
 		return fail.CodeValidation
 	}
 	vars, err := parseTemplateVariableFlags(tvs)
 	if err != nil {
-		writeError(stderr, err)
+		writeError(stderr, err, cfg)
 		return fail.ExitCode(err)
 	}
 
@@ -128,7 +124,7 @@ func runDashboardsCreateCmd(ctx context.Context, svcs app.Services, cfg app.Conf
 		TemplateVariables: vars,
 	})
 	if err != nil {
-		writeError(stderr, err)
+		writeError(stderr, err, cfg)
 		return fail.ExitCode(err)
 	}
 	if dry, _ := result["dry_run"].(bool); dry && !cfg.JSON {
@@ -147,7 +143,6 @@ func runDashboardsUpdateCmd(ctx context.Context, svcs app.Services, cfg app.Conf
 	replaceAll := fs.Bool("replace-all", false, "confirm full replacement update")
 	dryRun := fs.Bool("dry-run", false, "show semantic diff against current dashboard and do not PUT")
 	showDiff := fs.Bool("diff", false, "show semantic diff against the current dashboard")
-	expectedModified := fs.String("expected-modified-at", "", "abort if remote modified_at does not match")
 	ifUnmodified := fs.String("if-unmodified-since", "", "abort if remote modified_at does not match")
 	skipValidate := fs.Bool("skip-validate", false, "skip query preflight before update")
 	allowEmpty := fs.Bool("allow-empty-series", false, "no-data is always a warning; flag kept for compatibility")
@@ -156,7 +151,7 @@ func runDashboardsUpdateCmd(ctx context.Context, svcs app.Services, cfg app.Conf
 	var tvs repeatableStrings
 	fs.Var(&tvs, "template-variable", "substitute $name.value in queries (name=value, repeatable)")
 	if err := fs.Parse(parseArgs); err != nil {
-		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl dashboards update <id> --from-file <path> --replace-all"))
+		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl dashboards update <id> --from-file <path> --replace-all"), cfg)
 		return fail.CodeValidation
 	}
 	dashboardID := leadingID
@@ -164,17 +159,12 @@ func runDashboardsUpdateCmd(ctx context.Context, svcs app.Services, cfg app.Conf
 		dashboardID = fs.Arg(0)
 	}
 	if dashboardID == "" {
-		writeError(stderr, fail.NewValidation("missing dashboard ID", "usage: ddctl dashboards update <id> --from-file <path> --replace-all"))
+		writeError(stderr, fail.NewValidation("missing dashboard ID", "usage: ddctl dashboards update <id> --from-file <path> --replace-all"), cfg)
 		return fail.CodeValidation
-	}
-	expected, err := mergeUnmodifiedSince(*expectedModified, *ifUnmodified)
-	if err != nil {
-		writeError(stderr, err)
-		return fail.ExitCode(err)
 	}
 	vars, err := parseTemplateVariableFlags(tvs)
 	if err != nil {
-		writeError(stderr, err)
+		writeError(stderr, err, cfg)
 		return fail.ExitCode(err)
 	}
 
@@ -185,13 +175,13 @@ func runDashboardsUpdateCmd(ctx context.Context, svcs app.Services, cfg app.Conf
 		AllowEmptySeries:   *allowEmpty,
 		From:               *from,
 		To:                 *to,
-		DryRun:             *dryRun,
-		ShowDiff:           *showDiff,
-		ExpectedModifiedAt: expected,
-		TemplateVariables:  vars,
+		DryRun:            *dryRun,
+		ShowDiff:          *showDiff,
+		IfUnmodifiedSince: *ifUnmodified,
+		TemplateVariables: vars,
 	}, *replaceAll)
 	if err != nil {
-		writeError(stderr, err)
+		writeError(stderr, err, cfg)
 		return fail.ExitCode(err)
 	}
 	if dry, _ := result["dry_run"].(bool); dry && !cfg.JSON {
@@ -222,12 +212,12 @@ func runDashboardsValidateCmd(ctx context.Context, svcs app.Services, cfg app.Co
 	var tvs repeatableStrings
 	fs.Var(&tvs, "template-variable", "substitute $name.value in queries (name=value, repeatable)")
 	if err := fs.Parse(args); err != nil {
-		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl dashboards validate --from-file <path>"))
+		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl dashboards validate --from-file <path>"), cfg)
 		return fail.CodeValidation
 	}
 	vars, err := parseTemplateVariableFlags(tvs)
 	if err != nil {
-		writeError(stderr, err)
+		writeError(stderr, err, cfg)
 		return fail.ExitCode(err)
 	}
 
@@ -239,12 +229,12 @@ func runDashboardsValidateCmd(ctx context.Context, svcs app.Services, cfg app.Co
 		TemplateVariables: vars,
 	})
 	if err != nil {
-		writeError(stderr, err)
+		writeError(stderr, err, cfg)
 		return fail.ExitCode(err)
 	}
 	if cfg.JSON {
 		if err := svcs.Output.JSON(stdout, result); err != nil {
-			writeError(stderr, fail.NewAPI(err.Error(), "unable to encode dashboard validation result", ""))
+			writeError(stderr, fail.NewAPI(err.Error(), "unable to encode dashboard validation result", ""), cfg)
 			return fail.CodeAPI
 		}
 		return fail.CodeOK
@@ -253,10 +243,157 @@ func runDashboardsValidateCmd(ctx context.Context, svcs app.Services, cfg app.Co
 	return fail.CodeOK
 }
 
+func runDashboardsListCmd(ctx context.Context, svcs app.Services, cfg app.Config, args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("dashboards list", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	limit := fs.Int("limit", 0, "maximum number of dashboards to return (0 = all)")
+	if err := fs.Parse(args); err != nil {
+		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl dashboards list [--limit <n>]"), cfg)
+		return fail.CodeValidation
+	}
+	result, err := svcs.Dashboards.List(ctx, *limit)
+	if err != nil {
+		writeError(stderr, err, cfg)
+		return fail.ExitCode(err)
+	}
+	if cfg.JSON {
+		return writeDashboardListJSON(svcs, cfg, stdout, stderr, result)
+	}
+	for _, item := range result {
+		fmt.Fprintf(stdout, "%-12s  %s\n  %s\n", stringsOrSprint(item["id"]), item["title"], item["url"])
+	}
+	return fail.CodeOK
+}
+
+func runDashboardsSearchCmd(ctx context.Context, svcs app.Services, cfg app.Config, args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("dashboards search", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	title := fs.String("title", "", "case-insensitive title substring")
+	tag := fs.String("tag", "", "exact tag match")
+	limit := fs.Int("limit", 0, "maximum number of dashboards to return (0 = all)")
+	if err := fs.Parse(args); err != nil {
+		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl dashboards search [--title <substr>] [--tag <tag>] [--limit <n>]"), cfg)
+		return fail.CodeValidation
+	}
+	if strings.TrimSpace(*title) == "" && strings.TrimSpace(*tag) == "" {
+		writeError(stderr, fail.NewValidation("pass at least one of --title or --tag", "usage: ddctl dashboards search --title <substr>"), cfg)
+		return fail.CodeValidation
+	}
+	result, err := svcs.Dashboards.Search(ctx, *title, *tag, *limit)
+	if err != nil {
+		writeError(stderr, err, cfg)
+		return fail.ExitCode(err)
+	}
+	if *limit > 0 && len(result) >= *limit {
+		fmt.Fprintf(stderr, "warning: results truncated to %d dashboards\n", *limit)
+	}
+	if cfg.JSON {
+		return writeDashboardListJSON(svcs, cfg, stdout, stderr, result)
+	}
+	for _, item := range result {
+		fmt.Fprintf(stdout, "%-12s  %s\n  %s\n", stringsOrSprint(item["id"]), item["title"], item["url"])
+	}
+	return fail.CodeOK
+}
+
+func runDashboardsCloneCmd(ctx context.Context, svcs app.Services, cfg app.Config, args []string, stdout, stderr io.Writer) int {
+	leadingID, parseArgs := splitLeadingPositional(args)
+	fs := flag.NewFlagSet("dashboards clone", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	title := fs.String("title", "", "title for the cloned dashboard (required)")
+	skipValidate := fs.Bool("skip-validate", false, "skip query preflight before create")
+	allowEmpty := fs.Bool("allow-empty-series", false, "no-data is always a warning; flag kept for compatibility")
+	from := fs.String("from", "now-30d", "query preflight start time")
+	to := fs.String("to", "now", "query preflight end time")
+	dryRun := fs.Bool("dry-run", false, "validate and print summary; do not POST")
+	var tvs repeatableStrings
+	fs.Var(&tvs, "template-variable", "substitute $name.value in queries (name=value, repeatable)")
+	if err := fs.Parse(parseArgs); err != nil {
+		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl dashboards clone <id> --title <title>"), cfg)
+		return fail.CodeValidation
+	}
+	sourceID := leadingID
+	if sourceID == "" && fs.NArg() > 0 {
+		sourceID = fs.Arg(0)
+	}
+	if sourceID == "" {
+		writeError(stderr, fail.NewValidation("missing source dashboard ID", "usage: ddctl dashboards clone <id> --title <title>"), cfg)
+		return fail.CodeValidation
+	}
+	if strings.TrimSpace(*title) == "" {
+		writeError(stderr, fail.NewValidation("--title is required", "usage: ddctl dashboards clone <id> --title <title>"), cfg)
+		return fail.CodeValidation
+	}
+	vars, err := parseTemplateVariableFlags(tvs)
+	if err != nil {
+		writeError(stderr, err, cfg)
+		return fail.ExitCode(err)
+	}
+	result, err := svcs.Dashboards.Clone(ctx, sourceID, *title, service.DashboardMutationInput{
+		SkipValidate:      *skipValidate,
+		AllowEmptySeries:  *allowEmpty,
+		From:              *from,
+		To:                *to,
+		DryRun:            *dryRun,
+		TemplateVariables: vars,
+	})
+	if err != nil {
+		writeError(stderr, err, cfg)
+		return fail.ExitCode(err)
+	}
+	if dry, _ := result["dry_run"].(bool); dry && !cfg.JSON {
+		fmt.Fprintf(stdout, "dry-run: would clone dashboard %s as %q\n", sourceID, *title)
+		printDashboardSummary(stdout, result)
+		return fail.CodeOK
+	}
+	return writeDashboardResult(svcs, cfg, stdout, stderr, result)
+}
+
+func runDashboardsDeleteCmd(ctx context.Context, svcs app.Services, cfg app.Config, args []string, stdout, stderr io.Writer) int {
+	leadingID, parseArgs := splitLeadingPositional(args)
+	fs := flag.NewFlagSet("dashboards delete", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	confirm := fs.String("confirm", "", "must equal dashboard ID")
+	if err := fs.Parse(parseArgs); err != nil {
+		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl dashboards delete <id> --confirm <id>"), cfg)
+		return fail.CodeValidation
+	}
+	dashboardID := leadingID
+	if dashboardID == "" && fs.NArg() > 0 {
+		dashboardID = fs.Arg(0)
+	}
+	if dashboardID == "" {
+		writeError(stderr, fail.NewValidation("missing dashboard ID", "usage: ddctl dashboards delete <id> --confirm <id>"), cfg)
+		return fail.CodeValidation
+	}
+	result, err := svcs.Dashboards.Delete(ctx, service.DashboardDeleteInput{
+		ID:      dashboardID,
+		Confirm: *confirm,
+	})
+	if err != nil {
+		writeError(stderr, err, cfg)
+		return fail.ExitCode(err)
+	}
+	if cfg.JSON {
+		return writeDashboardResult(svcs, cfg, stdout, stderr, result)
+	}
+	fmt.Fprintf(stdout, "deleted dashboard %s (%s)\n", dashboardID, result["title"])
+	return fail.CodeOK
+}
+
+func writeDashboardListJSON(svcs app.Services, cfg app.Config, stdout, stderr io.Writer, result []map[string]any) int {
+	payload := map[string]any{"dashboards": result}
+	if err := svcs.Output.JSON(stdout, payload); err != nil {
+		writeError(stderr, fail.NewAPI(err.Error(), "unable to encode dashboard list result", ""), cfg)
+		return fail.CodeAPI
+	}
+	return fail.CodeOK
+}
+
 func writeDashboardResult(svcs app.Services, cfg app.Config, stdout, stderr io.Writer, result map[string]any) int {
 	if cfg.JSON {
 		if err := svcs.Output.JSON(stdout, result); err != nil {
-			writeError(stderr, fail.NewAPI(err.Error(), "unable to encode dashboard result", ""))
+			writeError(stderr, fail.NewAPI(err.Error(), "unable to encode dashboard result", ""), cfg)
 			return fail.CodeAPI
 		}
 		return fail.CodeOK

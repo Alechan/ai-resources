@@ -3,17 +3,65 @@ package fail
 import "errors"
 
 type Error struct {
-	Category string `json:"category"`
-	Message  string `json:"message"`
-	Action   string `json:"action,omitempty"`
-	Details  string `json:"details,omitempty"`
+	Category    string `json:"type"`
+	Message     string `json:"message"`
+	Action      string `json:"action,omitempty"`
+	Details     string `json:"details,omitempty"`
+	Resource    string `json:"resource,omitempty"`
+	WidgetIndex string `json:"widget_index,omitempty"`
+	WidgetTitle string `json:"widget_title,omitempty"`
+	QueryIndex  *int   `json:"query_index,omitempty"`
 }
 
 func (e *Error) Error() string { return e.Message }
 
+func (e *Error) Envelope() map[string]any {
+	out := map[string]any{
+		"error": map[string]any{
+			"type":    e.Category,
+			"message": e.Message,
+		},
+	}
+	m := out["error"].(map[string]any)
+	if e.Action != "" {
+		m["action"] = e.Action
+	}
+	if e.Resource != "" {
+		m["resource"] = e.Resource
+	}
+	if e.WidgetIndex != "" {
+		m["widget_index"] = e.WidgetIndex
+	}
+	if e.WidgetTitle != "" {
+		m["widget_title"] = e.WidgetTitle
+	}
+	if e.QueryIndex != nil {
+		m["query_index"] = *e.QueryIndex
+	}
+	return out
+}
+
 func NewValidation(msg, action string) *Error {
 	return &Error{Category: "validation", Message: msg, Action: action}
 }
+
+func NewResourceValidation(resource, msg, action string) *Error {
+	return &Error{Category: "validation", Resource: resource, Message: msg, Action: action}
+}
+
+func NewQueryValidation(resource, widgetIndex, widgetTitle string, queryIndex int, msg, action string) *Error {
+	idx := queryIndex
+	return &Error{
+		Category:    "validation",
+		Resource:    resource,
+		Message:     msg,
+		Action:      action,
+		WidgetIndex: widgetIndex,
+		WidgetTitle: widgetTitle,
+		QueryIndex:  &idx,
+	}
+}
+
 func NewConfig(msg, action string) *Error {
 	return &Error{Category: "config", Message: msg, Action: action}
 }

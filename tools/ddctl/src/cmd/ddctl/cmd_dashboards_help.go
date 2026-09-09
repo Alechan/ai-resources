@@ -18,8 +18,16 @@ func printDashboardsHelp(w io.Writer, args []string) {
 		fmt.Fprint(w, helpDashboardsCreate)
 	case "update":
 		fmt.Fprint(w, helpDashboardsUpdate)
+	case "list":
+		fmt.Fprint(w, helpDashboardsList)
+	case "search":
+		fmt.Fprint(w, helpDashboardsSearch)
+	case "clone":
+		fmt.Fprint(w, helpDashboardsClone)
+	case "delete":
+		fmt.Fprint(w, helpDashboardsDelete)
 	default:
-		fmt.Fprintf(w, "Unknown dashboards subcommand %q.\nValid choices: get, validate, create, update.\n\n", sub)
+		fmt.Fprintf(w, "Unknown dashboards subcommand %q.\nValid choices: get, list, search, validate, create, update, clone, delete.\n\n", sub)
 		fmt.Fprint(w, helpDashboards)
 	}
 }
@@ -29,9 +37,13 @@ const helpDashboards = `Usage:
 
 Subcommands:
   get       Fetch a dashboard by ID
+  list      List dashboards
+  search    Search dashboards by title or tag
   validate  Check payload structure and preflight queries (no writes)
   create    Create a dashboard from JSON
   update    Replace a dashboard (requires --replace-all)
+  clone     Clone a dashboard to a new title
+  delete    Delete a dashboard (requires --confirm)
 
 Use ddctl dashboards <subcommand> --help for flags, defaults, exit codes, and examples.
 
@@ -161,7 +173,6 @@ Flags:
   --dry-run                          Validate and show semantic diff; do not PUT
   --diff                             Show semantic diff against the current dashboard
   --if-unmodified-since <rfc3339>    Abort if remote modified_at does not match
-  --expected-modified-at <rfc3339>   Alias of --if-unmodified-since
   --skip-validate                    Skip query preflight (structure still checked)
   --from <time>                      Query window start (default: now-30d)
   --to <time>                        Query window end (default: now)
@@ -189,4 +200,96 @@ Example:
     --from-file dashboard.json \
     --replace-all \
     --if-unmodified-since "2026-09-09T16:40:00Z"
+`
+
+const helpDashboardsList = `Usage:
+  ddctl dashboards list [--limit <n>]
+
+List dashboards from GET /api/v1/dashboard.
+
+Flags:
+  --limit <n>   Return at most n dashboards (default: all)
+
+Output:
+  Text: ID, title, URL per dashboard
+  JSON (--json): {"dashboards":[...]}
+
+Exit codes:
+  0  success
+  3  authentication failure
+  5  API failure
+
+Example:
+  ddctl dashboards list --limit 20
+`
+
+const helpDashboardsSearch = `Usage:
+  ddctl dashboards search [--title <substr>] [--tag <tag>] [--limit <n>]
+
+Search dashboards client-side after listing all dashboards.
+
+At least one of --title or --tag is required.
+
+Flags:
+  --title <substr>   Case-insensitive title substring
+  --tag <tag>        Exact tag match
+  --limit <n>        Return at most n matches (warns when truncated)
+
+Exit codes:
+  0  success
+  2  missing filters or invalid usage
+  5  API failure
+
+Example:
+  ddctl dashboards search --title "DELETE ME ddctl-dev"
+  ddctl dashboards search --tag team:platform --limit 10
+`
+
+const helpDashboardsClone = `Usage:
+  ddctl dashboards clone <id> --title <title> [flags]
+
+Clone a dashboard by fetching the source, stripping identity fields, and creating a copy.
+
+This mutates Datadog. Do not run unless clone was requested.
+
+Positional arguments:
+  id    Source dashboard ID
+
+Flags:
+  --title <title>                    Title for the clone (required)
+  --dry-run                          Validate and print summary; do not POST
+  --skip-validate                    Skip query preflight
+  --from <time>                      Query window start (default: now-30d)
+  --to <time>                        Query window end (default: now)
+  --template-variable <name=value>   Substitute $name.value during validate (repeatable)
+
+Exit codes:
+  0  cloned, or dry-run success
+  2  missing --title or invalid usage
+  5  API failure
+
+Example:
+  ddctl dashboards clone cec-7ix-73w --title "DELETE ME ddctl-dev copy"
+`
+
+const helpDashboardsDelete = `Usage:
+  ddctl dashboards delete <id> --confirm <id>
+
+Delete a dashboard via DELETE /api/v1/dashboard/{id}.
+
+This mutates Datadog. Do not run unless delete was requested.
+
+Positional arguments:
+  id    Dashboard ID to delete
+
+Flags:
+  --confirm <id>   Must exactly equal the dashboard ID
+
+Exit codes:
+  0  deleted
+  2  missing or mismatched --confirm
+  5  API failure
+
+Example:
+  ddctl dashboards delete abc-def-ghi --confirm abc-def-ghi
 `

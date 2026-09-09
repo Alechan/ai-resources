@@ -15,7 +15,7 @@ import (
 
 func runNotebooksCmd(ctx context.Context, svcs app.Services, cfg app.Config, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		writeError(stderr, fail.NewValidation("missing notebooks subcommand", "usage: ddctl notebooks <get|create|update|validate> [flags]"))
+		writeError(stderr, fail.NewValidation("missing notebooks subcommand", "usage: ddctl notebooks <get|create|update|validate> [flags]"), cfg)
 		return fail.CodeValidation
 	}
 
@@ -29,7 +29,7 @@ func runNotebooksCmd(ctx context.Context, svcs app.Services, cfg app.Config, arg
 	case "validate":
 		return runNotebooksValidateCmd(ctx, svcs, cfg, args[1:], stdout, stderr)
 	default:
-		writeError(stderr, fail.NewValidation("unknown notebooks subcommand", "usage: ddctl notebooks <get|create|update|validate> [flags]"))
+		writeError(stderr, fail.NewValidation("unknown notebooks subcommand", "usage: ddctl notebooks <get|create|update|validate> [flags]"), cfg)
 		return fail.CodeValidation
 	}
 }
@@ -41,7 +41,7 @@ func runNotebooksGetCmd(ctx context.Context, svcs app.Services, cfg app.Config, 
 	fs.SetOutput(io.Discard)
 	includeMetadata := fs.Bool("include-metadata", true, "include notebook metadata")
 	if err := fs.Parse(parseArgs); err != nil {
-		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl notebooks get <id> [--include-metadata]"))
+		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl notebooks get <id> [--include-metadata]"), cfg)
 		return fail.CodeValidation
 	}
 	notebookID := leadingID
@@ -49,7 +49,7 @@ func runNotebooksGetCmd(ctx context.Context, svcs app.Services, cfg app.Config, 
 		notebookID = fs.Arg(0)
 	}
 	if notebookID == "" {
-		writeError(stderr, fail.NewValidation("missing notebook ID", "usage: ddctl notebooks get <id>"))
+		writeError(stderr, fail.NewValidation("missing notebook ID", "usage: ddctl notebooks get <id>"), cfg)
 		return fail.CodeValidation
 	}
 
@@ -58,12 +58,12 @@ func runNotebooksGetCmd(ctx context.Context, svcs app.Services, cfg app.Config, 
 		IncludeMetadata: *includeMetadata,
 	})
 	if err != nil {
-		writeError(stderr, err)
+		writeError(stderr, err, cfg)
 		return fail.ExitCode(err)
 	}
 	if cfg.JSON {
 		if err := svcs.Output.JSON(stdout, result); err != nil {
-			writeError(stderr, fail.NewAPI(err.Error(), "unable to encode notebook result", ""))
+			writeError(stderr, fail.NewAPI(err.Error(), "unable to encode notebook result", ""), cfg)
 			return fail.CodeAPI
 		}
 		return fail.CodeOK
@@ -79,7 +79,7 @@ func runNotebooksCreateCmd(ctx context.Context, svcs app.Services, cfg app.Confi
 	name := fs.String("name", "", "override notebook name")
 	timeSpan := fs.String("time", "", "override live_span (e.g. 1w)")
 	if err := fs.Parse(args); err != nil {
-		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl notebooks create --from-file <path> [--name <name>] [--time <live_span>]"))
+		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl notebooks create --from-file <path> [--name <name>] [--time <live_span>]"), cfg)
 		return fail.CodeValidation
 	}
 
@@ -89,12 +89,12 @@ func runNotebooksCreateCmd(ctx context.Context, svcs app.Services, cfg app.Confi
 		Time:     *timeSpan,
 	})
 	if err != nil {
-		writeError(stderr, err)
+		writeError(stderr, err, cfg)
 		return fail.ExitCode(err)
 	}
 	if cfg.JSON {
 		if err := svcs.Output.JSON(stdout, result); err != nil {
-			writeError(stderr, fail.NewAPI(err.Error(), "unable to encode notebook result", ""))
+			writeError(stderr, fail.NewAPI(err.Error(), "unable to encode notebook result", ""), cfg)
 			return fail.CodeAPI
 		}
 		return fail.CodeOK
@@ -111,7 +111,7 @@ func runNotebooksUpdateCmd(ctx context.Context, svcs app.Services, cfg app.Confi
 	fromFile := fs.String("from-file", "", "path to notebook JSON payload")
 	replaceAll := fs.Bool("replace-all", false, "confirm full replacement update")
 	if err := fs.Parse(parseArgs); err != nil {
-		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl notebooks update <id> --from-file <path> --replace-all"))
+		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl notebooks update <id> --from-file <path> --replace-all"), cfg)
 		return fail.CodeValidation
 	}
 	notebookID := leadingID
@@ -119,7 +119,7 @@ func runNotebooksUpdateCmd(ctx context.Context, svcs app.Services, cfg app.Confi
 		notebookID = fs.Arg(0)
 	}
 	if notebookID == "" {
-		writeError(stderr, fail.NewValidation("missing notebook ID", "usage: ddctl notebooks update <id> --from-file <path> --replace-all"))
+		writeError(stderr, fail.NewValidation("missing notebook ID", "usage: ddctl notebooks update <id> --from-file <path> --replace-all"), cfg)
 		return fail.CodeValidation
 	}
 
@@ -128,12 +128,12 @@ func runNotebooksUpdateCmd(ctx context.Context, svcs app.Services, cfg app.Confi
 		FilePath: *fromFile,
 	}, *replaceAll)
 	if err != nil {
-		writeError(stderr, err)
+		writeError(stderr, err, cfg)
 		return fail.ExitCode(err)
 	}
 	if cfg.JSON {
 		if err := svcs.Output.JSON(stdout, result); err != nil {
-			writeError(stderr, fail.NewAPI(err.Error(), "unable to encode notebook result", ""))
+			writeError(stderr, fail.NewAPI(err.Error(), "unable to encode notebook result", ""), cfg)
 			return fail.CodeAPI
 		}
 		return fail.CodeOK
@@ -150,7 +150,7 @@ func runNotebooksValidateCmd(ctx context.Context, svcs app.Services, cfg app.Con
 	to := fs.String("to", "now", "metrics validation end time")
 	allowEmpty := fs.Bool("allow-empty-series", false, "allow timeseries metric queries with no data")
 	if err := fs.Parse(args); err != nil {
-		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl notebooks validate --from-file <path> [--from <time>] [--to <time>] [--allow-empty-series]"))
+		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl notebooks validate --from-file <path> [--from <time>] [--to <time>] [--allow-empty-series]"), cfg)
 		return fail.CodeValidation
 	}
 
@@ -161,12 +161,12 @@ func runNotebooksValidateCmd(ctx context.Context, svcs app.Services, cfg app.Con
 		AllowEmptySeries: *allowEmpty,
 	})
 	if err != nil {
-		writeError(stderr, err)
+		writeError(stderr, err, cfg)
 		return fail.ExitCode(err)
 	}
 	if cfg.JSON {
 		if err := svcs.Output.JSON(stdout, result); err != nil {
-			writeError(stderr, fail.NewAPI(err.Error(), "unable to encode notebook validation result", ""))
+			writeError(stderr, fail.NewAPI(err.Error(), "unable to encode notebook validation result", ""), cfg)
 			return fail.CodeAPI
 		}
 		return fail.CodeOK

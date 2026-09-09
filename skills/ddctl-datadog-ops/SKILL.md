@@ -124,15 +124,21 @@ Supported `--from`/`--to` formats: `now`, `now-1h`, `now-30m`, `now-2d`, `now-1w
   1. query with standard fields first,
   2. then use Dashboard/raw logs for deep structured payload inspection.
 
-### Step 5 — List monitors
+### Step 5 — Monitor operations
 
-```
-ddctl monitors-list
-ddctl monitors-list --tag env:prod
-ddctl monitors-get <monitor-id>
+```bash
+ddctl monitors list
+ddctl monitors list --tag env:prod
+ddctl monitors get <monitor-id>
+ddctl --json monitors get <monitor-id> > monitor.json
+ddctl monitors validate --from-file monitor.json
+ddctl monitors create --from-file monitor.json --dry-run
+ddctl monitors update <id> --from-file monitor.json --replace-all
+ddctl monitors mute <id> [--until <rfc3339>]
+ddctl monitors unmute <id> [--confirm <id>]   # confirm required for env:prod
 ```
 
-Output format (text): `[id] state    type     name    tags:…`
+Output format (text list): `[id] state type name tags:…`
 
 ### Step 6 — List events
 
@@ -204,12 +210,16 @@ Use dashboard commands to export, validate, and write Datadog dashboards.
 ```bash
 ddctl dashboards get <id>
 ddctl --json dashboards get <id> > dashboard.json
+ddctl dashboards list
+ddctl dashboards search --title "<substr>"
 ddctl dashboards validate --from-file dashboard.json --from now-4h
 ddctl dashboards validate --from-file dashboard.json --template-variable environment=acceptance --from now-4h
 ddctl dashboards create --from-file dashboard.json --title "Copy" --dry-run
 ddctl dashboards create --from-file dashboard.json --title "Copy"
+ddctl dashboards clone <id> --title "Copy" --dry-run
 ddctl dashboards update <id> --from-file dashboard.json --replace-all --dry-run
 ddctl dashboards update <id> --from-file dashboard.json --replace-all --if-unmodified-since "<modified_at>"
+ddctl dashboards delete <id> --confirm <id>
 ```
 
 Dashboard caveats:
@@ -225,7 +235,8 @@ Dashboard caveats:
 - `ddctl doctor` shows `credentials found: true`, `datadog reachable: true`, and `auth query valid: true`.
 - `ddctl logs-query --query "*" --limit 1` returns at least one log event or empty result without error.
 - `ddctl logs-query --count-only --query "*" --from now-1h --json` returns metadata with `hit_count`.
-- `ddctl monitors-list` returns a list of monitors (even if empty).
+- `ddctl monitors list` returns a list of monitors (even if empty).
+- `ddctl monitors get <id>` returns raw monitor JSON with `options` when present.
 - `ddctl events-list --from now-2h` returns events or empty without error.
 - `ddctl metrics-query --query "avg:system.cpu.user{*}" --from now-1h` returns series or "no data".
 - `ddctl notebooks get <id>` returns notebook details without error.

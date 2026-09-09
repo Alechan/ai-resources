@@ -1,6 +1,7 @@
 package app
 
 import (
+	"io"
 	"net/http"
 
 	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/auth"
@@ -13,13 +14,13 @@ type Services struct {
 	Auth         *auth.KeychainProvider
 	Doctor       *service.DoctorService
 	LogsQuery    *service.LogsQueryService
-	MonitorsList *service.MonitorsListService
-	MonitorsGet  *service.MonitorsGetService
+	Monitors     *service.MonitorsService
 	EventsList   *service.EventsListService
 	MetricsQuery *service.MetricsQueryService
 	Notebooks    *service.NotebooksService
 	Dashboards   *service.DashboardsService
 	Output       *output.Writer
+	dd           *datadogapi.Client
 }
 
 func NewServices(cfg Config) Services {
@@ -33,12 +34,18 @@ func NewServices(cfg Config) Services {
 		Auth:         authProvider,
 		Doctor:       service.NewDoctorService(authProvider, ddClient),
 		LogsQuery:    logsSvc,
-		MonitorsList: service.NewMonitorsListService(ddClient, cfg.Site),
-		MonitorsGet:  service.NewMonitorsGetService(ddClient, cfg.Site),
+		Monitors:     service.NewMonitorsService(ddClient, metricsSvc, cfg.Site),
 		EventsList:   service.NewEventsListService(ddClient),
 		MetricsQuery: metricsSvc,
 		Notebooks:    service.NewNotebooksService(ddClient, metricsSvc),
 		Dashboards:   service.NewDashboardsService(ddClient, metricsSvc, logsSvc, cfg.Site),
 		Output:       output.NewWriter(),
+		dd:           ddClient,
+	}
+}
+
+func (s *Services) SetDebug(w io.Writer) {
+	if s.dd != nil {
+		s.dd.SetDebugLogger(datadogapi.NewDebugLogger(w))
 	}
 }

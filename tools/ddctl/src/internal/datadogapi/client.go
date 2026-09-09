@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/auth"
 	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/fail"
@@ -17,11 +18,16 @@ type Client struct {
 	httpClient *http.Client
 	site       string
 	cookies    auth.CookieProvider
+	debug      DebugLogger
 }
 
 // NewClient creates a new DataDog API client.
 func NewClient(httpClient *http.Client, site string, cookies auth.CookieProvider) *Client {
 	return &Client{httpClient: httpClient, site: site, cookies: cookies}
+}
+
+func (c *Client) SetDebugLogger(l DebugLogger) {
+	c.debug = l
 }
 
 func (c *Client) baseURL() string {
@@ -30,54 +36,52 @@ func (c *Client) baseURL() string {
 
 // Get performs an authenticated GET request and decodes the JSON response into out.
 func (c *Client) Get(ctx context.Context, path string, out any) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL()+path, nil)
-	if err != nil {
-		return fail.MapNetworkOrAPI(err)
-	}
-	if err := c.addAuth(req); err != nil {
-		return err
-	}
-	return c.do(req, out)
+	return c.request(ctx, http.MethodGet, path, nil, out)
 }
 
 // Post performs an authenticated POST request with a JSON body and decodes the JSON response into out.
-// If a CSRF token cookie is present, it is automatically injected as _authentication_token in the
-// request body (required by DataDog's browser UI endpoints).
 func (c *Client) Post(ctx context.Context, path string, body, out any) error {
-	b, err := json.Marshal(body)
-	if err != nil {
-		return fail.NewAPI("failed to marshal request body", "", err.Error())
-	}
-	// Inject _authentication_token from CSRF cookie if available.
-	if csrf := c.csrfToken(); csrf != "" {
-		var m map[string]any
-		if json.Unmarshal(b, &m) == nil {
-			m["_authentication_token"] = csrf
-			if rb, err := json.Marshal(m); err == nil {
-				b = rb
-			}
-		}
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL()+path, bytes.NewReader(b))
-	if err != nil {
-		return fail.MapNetworkOrAPI(err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if err := c.addAuth(req); err != nil {
-		return err
-	}
-	return c.do(req, out)
+	return c.request(ctx, http.MethodPost, path, body, out)
 }
 
 // Put performs an authenticated PUT request with a JSON body and decodes the JSON response into out.
-// If a CSRF token cookie is present, it is automatically injected as _authentication_token in the
-// request body (required by DataDog's browser UI endpoints).
 func (c *Client) Put(ctx context.Context, path string, body, out any) error {
+	return c.request(ctx, http.MethodPut, path, body, out)
+}
+
+// Delete performs an authenticated DELETE request and optionally decodes the JSON response into out.
+func (c *Client) Delete(ctx context.Context, path string, out any) error {
+	return c.request(ctx, http.MethodDelete, path, nil, out)
+}
+
+func (c *Client) request(ctx context.Context, method, path string, body, out any) error {
+	var reader io.Reader
+	if body != nil {
+		b, err := c.marshalBody(body)
+		if err != nil {
+			return err
+		}
+		reader = bytes.NewReader(b)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, c.baseURL()+path, reader)
+	if err != nil {
+		return fail.MapNetworkOrAPI(err)
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if err := c.addAuth(req); err != nil {
+		return err
+	}
+	started := time.Now()
+	return c.do(req, out, started)
+}
+
+func (c *Client) marshalBody(body any) ([]byte, error) {
 	b, err := json.Marshal(body)
 	if err != nil {
-		return fail.NewAPI("failed to marshal request body", "", err.Error())
+		return nil, fail.NewAPI("failed to marshal request body", "", err.Error())
 	}
-	// Inject _authentication_token from CSRF cookie if available.
 	if csrf := c.csrfToken(); csrf != "" {
 		var m map[string]any
 		if json.Unmarshal(b, &m) == nil {
@@ -87,18 +91,9 @@ func (c *Client) Put(ctx context.Context, path string, body, out any) error {
 			}
 		}
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, c.baseURL()+path, bytes.NewReader(b))
-	if err != nil {
-		return fail.MapNetworkOrAPI(err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if err := c.addAuth(req); err != nil {
-		return err
-	}
-	return c.do(req, out)
+	return b, nil
 }
 
-// csrfToken returns the CSRF token value from stored cookies, or empty string if not found.
 func (c *Client) csrfToken() string {
 	cookies, err := c.cookies.Cookies()
 	if err != nil {
@@ -112,8 +107,6 @@ func (c *Client) csrfToken() string {
 	return ""
 }
 
-// Probe sends a GET to the given path and returns true if any HTTP response is received
-// (regardless of status code). Used for reachability checks.
 func (c *Client) Probe(ctx context.Context, path string) bool {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL()+path, nil)
 	if err != nil {
@@ -144,7 +137,7 @@ func (c *Client) addAuth(req *http.Request) error {
 	return nil
 }
 
-func (c *Client) do(req *http.Request, out any) error {
+func (c *Client) do(req *http.Request, out any, started time.Time) error {
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return fail.MapNetworkOrAPI(err)
@@ -154,6 +147,7 @@ func (c *Client) do(req *http.Request, out any) error {
 	if err != nil {
 		return fail.NewAPI("failed to read response body", "", "")
 	}
+	c.logRequest(req.Method, req.URL.Path, resp.StatusCode, started)
 	if resp.StatusCode == 401 || resp.StatusCode == 403 {
 		return fail.NewAuth(
 			fmt.Sprintf("HTTP %d: authentication required", resp.StatusCode),
@@ -164,12 +158,12 @@ func (c *Client) do(req *http.Request, out any) error {
 		return fail.NewAPI(
 			fmt.Sprintf("HTTP %d", resp.StatusCode),
 			"inspect API response",
-			string(bodyBytes),
+			redactDetails(string(bodyBytes)),
 		)
 	}
-	if out != nil {
+	if out != nil && len(bodyBytes) > 0 {
 		if err := json.Unmarshal(bodyBytes, out); err != nil {
-			return fail.NewAPI("failed to decode response", "", string(bodyBytes))
+			return fail.NewAPI("failed to decode response", "", redactDetails(string(bodyBytes)))
 		}
 	}
 	return nil

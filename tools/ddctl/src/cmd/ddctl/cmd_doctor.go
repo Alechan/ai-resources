@@ -15,19 +15,19 @@ func runDoctorCmd(ctx context.Context, svcs app.Services, cfg app.Config, args [
 	fs.SetOutput(io.Discard)
 	if err := fs.Parse(args); err != nil {
 		err = fail.NewValidation(err.Error(), "usage: ddctl doctor")
-		writeError(stderr, err)
+		writeError(stderr, err, cfg)
 		return fail.ExitCode(err)
 	}
 
 	report, err := svcs.Doctor.Run(ctx)
 	if err != nil {
-		writeError(stderr, err)
+		writeError(stderr, err, cfg)
 		return fail.ExitCode(err)
 	}
 
 	if cfg.JSON {
 		if err := svcs.Output.JSON(stdout, report); err != nil {
-			writeError(stderr, fail.NewAPI(err.Error(), "unable to encode doctor report", ""))
+			writeError(stderr, fail.NewAPI(err.Error(), "unable to encode doctor report", ""), cfg)
 			return fail.CodeAPI
 		}
 		return fail.CodeOK
