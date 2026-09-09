@@ -195,6 +195,7 @@ func TestExecute_MonitorsNestedHelp(t *testing.T) {
 				"update",
 				"mute",
 				"unmute",
+				"delete",
 			},
 		},
 		{

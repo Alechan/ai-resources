@@ -68,7 +68,7 @@ func runNotebooksGetCmd(ctx context.Context, svcs app.Services, cfg app.Config, 
 		}
 		return fail.CodeOK
 	}
-	printNotebookSummary(stdout, result)
+	printNotebookSummary(stdout, cfg.Site, result)
 	return fail.CodeOK
 }
 
@@ -99,7 +99,7 @@ func runNotebooksCreateCmd(ctx context.Context, svcs app.Services, cfg app.Confi
 		}
 		return fail.CodeOK
 	}
-	printNotebookSummary(stdout, result)
+	printNotebookSummary(stdout, cfg.Site, result)
 	return fail.CodeOK
 }
 
@@ -138,7 +138,7 @@ func runNotebooksUpdateCmd(ctx context.Context, svcs app.Services, cfg app.Confi
 		}
 		return fail.CodeOK
 	}
-	printNotebookSummary(stdout, result)
+	printNotebookSummary(stdout, cfg.Site, result)
 	return fail.CodeOK
 }
 
@@ -185,7 +185,7 @@ func runNotebooksValidateCmd(ctx context.Context, svcs app.Services, cfg app.Con
 	return fail.CodeOK
 }
 
-func printNotebookSummary(w io.Writer, payload map[string]any) {
+func printNotebookSummary(w io.Writer, site string, payload map[string]any) {
 	data, _ := payload["data"].(map[string]any)
 	attrs, _ := data["attributes"].(map[string]any)
 	name, _ := attrs["name"].(string)
@@ -196,7 +196,10 @@ func printNotebookSummary(w io.Writer, payload map[string]any) {
 	fmt.Fprintf(w, "Name: %s\n", name)
 	fmt.Fprintf(w, "Cells: %d\n", len(cells))
 	if id != "" {
-		fmt.Fprintf(w, "URL: https://app.datadoghq.com/notebook/%s\n", id)
+		if site == "" {
+			site = "datadoghq.com"
+		}
+		fmt.Fprintf(w, "URL: https://app.%s/notebook/%s\n", site, id)
 	}
 }
 

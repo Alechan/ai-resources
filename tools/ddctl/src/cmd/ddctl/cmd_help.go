@@ -52,12 +52,15 @@ func printNotebooksHelp(w io.Writer, args []string) {
 }
 
 const helpInit = `Usage:
-  ddctl init [--curl <curl>] [--cookie <cookie>] [--csrf-token <token>]
+  ddctl init [--curl-file <path>] [--clear]
 
 Store DataDog session cookies in the macOS Keychain.
 
-Prefer piping a copied cURL:
+Prefer piping a copied cURL from Chrome DevTools:
   pbpaste | ddctl init
+
+Or read cURL from a file:
+  ddctl init --curl-file ~/curl.txt
 
 Exit codes:
   0  success

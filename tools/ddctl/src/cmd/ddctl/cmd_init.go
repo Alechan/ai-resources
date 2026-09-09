@@ -13,6 +13,7 @@ import (
 	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/app"
 	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/curl"
 	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/fail"
+	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/service"
 	"golang.org/x/term"
 )
 
@@ -139,16 +140,26 @@ func initFromCurl(ctx context.Context, svcs app.Services, cfg app.Config, curlCm
 	count := len(cookies)
 
 	if cfg.JSON {
+		report, docErr := svcs.Doctor.Run(ctx)
+		if docErr != nil {
+			writeError(stderr, docErr, cfg)
+			return fail.ExitCode(docErr)
+		}
 		out := struct {
 			Site          string `json:"site"`
 			CookiesStored int    `json:"cookies_stored"`
-		}{Site: cfg.Site, CookiesStored: count}
+			service.DoctorReport
+		}{
+			Site:          cfg.Site,
+			CookiesStored: count,
+			DoctorReport:  report,
+		}
 		enc := json.NewEncoder(stdout)
 		if encErr := enc.Encode(out); encErr != nil {
 			writeError(stderr, fail.NewAPI(encErr.Error(), "unable to encode init result", ""), cfg)
 			return fail.CodeAPI
 		}
-		return fail.CodeOK
+		return doctorExitCode(report)
 	}
 
 	fmt.Fprintf(stdout, "\nstored %d cookies for %s\n", count, cfg.Site)

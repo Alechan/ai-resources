@@ -26,6 +26,9 @@ func (e *Error) Envelope() map[string]any {
 	if e.Action != "" {
 		m["action"] = e.Action
 	}
+	if e.Details != "" {
+		m["details"] = e.Details
+	}
 	if e.Resource != "" {
 		m["resource"] = e.Resource
 	}

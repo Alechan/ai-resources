@@ -129,7 +129,7 @@ func runDashboardsCreateCmd(ctx context.Context, svcs app.Services, cfg app.Conf
 	}
 	if dry, _ := result["dry_run"].(bool); dry && !cfg.JSON {
 		fmt.Fprintln(stdout, "dry-run: would create dashboard")
-		printDashboardSummary(stdout, result)
+		printDashboardSummary(stdout, cfg.Site, result)
 		return fail.CodeOK
 	}
 	return writeDashboardResult(svcs, cfg, stdout, stderr, result)
@@ -343,7 +343,7 @@ func runDashboardsCloneCmd(ctx context.Context, svcs app.Services, cfg app.Confi
 	}
 	if dry, _ := result["dry_run"].(bool); dry && !cfg.JSON {
 		fmt.Fprintf(stdout, "dry-run: would clone dashboard %s as %q\n", sourceID, *title)
-		printDashboardSummary(stdout, result)
+		printDashboardSummary(stdout, cfg.Site, result)
 		return fail.CodeOK
 	}
 	return writeDashboardResult(svcs, cfg, stdout, stderr, result)
@@ -398,18 +398,18 @@ func writeDashboardResult(svcs app.Services, cfg app.Config, stdout, stderr io.W
 		}
 		return fail.CodeOK
 	}
-	printDashboardSummary(stdout, result)
+	printDashboardSummary(stdout, cfg.Site, result)
 	return fail.CodeOK
 }
 
-func printDashboardSummary(w io.Writer, payload map[string]any) {
+func printDashboardSummary(w io.Writer, site string, payload map[string]any) {
 	id := stringsOrSprint(payload["id"])
 	title, _ := payload["title"].(string)
 	layout, _ := payload["layout_type"].(string)
 	widgets, _ := payload["widgets"].([]any)
 	url, _ := payload["url"].(string)
 	if url == "" && id != "" {
-		url = dashboardURL("datadoghq.com", id)
+		url = dashboardURL(site, id)
 	}
 
 	fmt.Fprintf(w, "ID:      %s\n", id)

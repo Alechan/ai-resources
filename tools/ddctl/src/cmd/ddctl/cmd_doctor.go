@@ -8,6 +8,7 @@ import (
 
 	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/app"
 	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/fail"
+	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/service"
 )
 
 func runDoctorCmd(ctx context.Context, svcs app.Services, cfg app.Config, args []string, stdout, stderr io.Writer) int {
@@ -42,6 +43,10 @@ func runDoctorCmd(ctx context.Context, svcs app.Services, cfg app.Config, args [
 		fmt.Fprintf(stdout, "note: %s\n", report.Note)
 	}
 
+	return doctorExitCode(report)
+}
+
+func doctorExitCode(report service.DoctorReport) int {
 	if !report.DataDogReachable {
 		return fail.CodeNetwork
 	}

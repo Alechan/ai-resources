@@ -134,7 +134,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: ddctl [global flags] <command> [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Commands:")
-	fmt.Fprintln(w, "  init            Store DataDog session cookies from a cURL command or raw cookie string")
+	fmt.Fprintln(w, "  init            Store DataDog session cookies from stdin or --curl-file")
 	fmt.Fprintln(w, "  doctor          Check credentials, DataDog auth, and reachability")
 	fmt.Fprintln(w, "  logs-query      Query DataDog logs")
 	fmt.Fprintln(w, "  monitors        Manage DataDog monitors (list/get/validate/create/update/mute/unmute/delete)")

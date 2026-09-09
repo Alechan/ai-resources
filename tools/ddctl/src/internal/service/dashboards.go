@@ -410,6 +410,7 @@ func (s *DashboardsService) Clone(ctx context.Context, sourceID, title string, i
 	if err != nil {
 		return nil, err
 	}
+	defer os.Remove(file)
 	input.FilePath = file
 	input.Title = title
 	return s.Create(ctx, input)

@@ -89,7 +89,7 @@ func runMonitorsGetCmd(ctx context.Context, svcs app.Services, cfg app.Config, a
 	if cfg.JSON {
 		return writeJSONResult(svcs, cfg, stdout, stderr, result)
 	}
-	printMonitorSummary(stdout, result)
+	printMonitorSummary(stdout, cfg.Site, result)
 	return fail.CodeOK
 }
 
@@ -159,13 +159,13 @@ func runMonitorsCreateCmd(ctx context.Context, svcs app.Services, cfg app.Config
 	}
 	if dry, _ := result["dry_run"].(bool); dry && !cfg.JSON {
 		fmt.Fprintln(stdout, "dry-run: would create monitor")
-		printMonitorSummary(stdout, result)
+		printMonitorSummary(stdout, cfg.Site, result)
 		return fail.CodeOK
 	}
 	if cfg.JSON {
 		return writeJSONResult(svcs, cfg, stdout, stderr, result)
 	}
-	printMonitorSummary(stdout, result)
+	printMonitorSummary(stdout, cfg.Site, result)
 	return fail.CodeOK
 }
 
@@ -219,7 +219,7 @@ func runMonitorsUpdateCmd(ctx context.Context, svcs app.Services, cfg app.Config
 	if cfg.JSON {
 		return writeJSONResult(svcs, cfg, stdout, stderr, result)
 	}
-	printMonitorSummary(stdout, result)
+	printMonitorSummary(stdout, cfg.Site, result)
 	return fail.CodeOK
 }
 
@@ -245,7 +245,7 @@ func runMonitorsMuteCmd(ctx context.Context, svcs app.Services, cfg app.Config, 
 	if cfg.JSON {
 		return writeJSONResult(svcs, cfg, stdout, stderr, result)
 	}
-	printMonitorSummary(stdout, result)
+	printMonitorSummary(stdout, cfg.Site, result)
 	return fail.CodeOK
 }
 
@@ -271,7 +271,7 @@ func runMonitorsUnmuteCmd(ctx context.Context, svcs app.Services, cfg app.Config
 	if cfg.JSON {
 		return writeJSONResult(svcs, cfg, stdout, stderr, result)
 	}
-	printMonitorSummary(stdout, result)
+	printMonitorSummary(stdout, cfg.Site, result)
 	return fail.CodeOK
 }
 
@@ -313,14 +313,14 @@ func parseMonitorIDArg(leading string, fs *flag.FlagSet) (int64, error) {
 	return id, nil
 }
 
-func printMonitorSummary(w io.Writer, payload map[string]any) {
+func printMonitorSummary(w io.Writer, site string, payload map[string]any) {
 	id := monitorIDFromMap(payload)
 	name, _ := payload["name"].(string)
 	mtype, _ := payload["type"].(string)
 	state, _ := payload["overall_state"].(string)
 	url, _ := payload["url"].(string)
 	if url == "" && id > 0 {
-		url = fmt.Sprintf("https://app.datadoghq.com/monitors/%d", id)
+		url = monitorURL(site, id)
 	}
 	fmt.Fprintf(w, "ID:     %d\n", id)
 	fmt.Fprintf(w, "Name:   %s\n", name)
@@ -336,6 +336,13 @@ func printMonitorSummary(w io.Writer, payload map[string]any) {
 	if q, _ := payload["query"].(string); q != "" {
 		fmt.Fprintf(w, "Query:  %s\n", q)
 	}
+}
+
+func monitorURL(site string, id int64) string {
+	if site == "" {
+		site = "datadoghq.com"
+	}
+	return fmt.Sprintf("https://app.%s/monitors/%d", site, id)
 }
 
 func monitorIDFromMap(payload map[string]any) int64 {

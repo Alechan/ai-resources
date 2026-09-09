@@ -49,32 +49,30 @@ in requests made from settings pages or on initial page load.
 
 **cURL format note:**
 Chrome may produce either `-H 'Cookie: ...'` or `-b '...'` form — `ddctl init` handles both.
-The `x-csrf-token` header is extracted automatically from the cURL when using `--curl`.
+The CSRF token from the cURL body (`_authentication_token`) or cookies is merged automatically.
 
-However, **shell-escaping a complex multi-line cURL** is error-prone. The reliable path:
-extract the cookie string and CSRF token from the cURL yourself and pass them as:
+**Shell-escaping a complex multi-line cURL is error-prone.** Prefer piping or a file:
 ```
-ddctl init --cookie '<cookie_string>' --csrf-token '<x-csrf-token value>'
+pbpaste | ddctl init
+ddctl init --curl-file ~/curl.txt
 ```
-To get the cookie string: find the `-b '...'` or `Cookie:` value in the cURL.
-To get the CSRF token: find the `-H 'x-csrf-token: ...'` line in the cURL.
 
 **Why is the CSRF token needed?**
 DataDog's browser UI endpoint (`/api/v1/logs-analytics/list`) validates a CSRF token sent
 both as the `x-csrf-token` request header and as `_authentication_token` in the POST body.
-This token is NOT a cookie — it lives in a `x-csrf-token` header in the request.
-`ddctl init` stores it as a synthetic `dd_csrf_token` cookie so the API client can inject it.
+`ddctl init` extracts it from the cURL and stores it as a synthetic `dd_csrf_token` cookie
+so the API client can inject it on each request.
 
 ### Step 2 — Initialize credentials
 
 Run in the terminal (not the chat, to avoid shell escaping issues):
 ```
-ddctl init --cookie '<cookie_string>'
+pbpaste | ddctl init
 ```
 
-Or, if the cURL shell-escaping works:
+Or save the cURL to a file first:
 ```
-ddctl init --curl '<full cURL command>'
+ddctl init --curl-file ~/curl.txt
 ```
 
 The skill can tell the user to run this command; it cannot execute interactive terminal commands itself.
@@ -291,14 +289,16 @@ Even if you export a HAR file with dozens of requests, all cookie fields will be
 
 **Only "Copy as cURL" from a single request preserves the cookie string.**
 
-### ddctl init --curl hangs in the terminal
+### ddctl init hangs in the terminal
 
-If the pasted cURL contains single quotes inside a single-quoted shell argument, the shell
-treats the command as incomplete and hangs.
+If you run `ddctl init` with no stdin and no `--curl-file`, it prints setup instructions and exits.
+If you paste a cURL directly on the command line and the shell sees unbalanced quotes, the shell
+may hang waiting for a closing quote.
 
-**Workaround:** Extract the cookie string from the cURL and pass it directly:
+**Workaround:** pipe from the clipboard or use a file:
 ```
-ddctl init --cookie '<extracted_cookie_string>'
+pbpaste | ddctl init
+ddctl init --curl-file ~/curl.txt
 ```
 
 ### Ideal request to copy is /api/v1/logs-analytics/list
