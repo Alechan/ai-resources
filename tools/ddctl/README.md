@@ -269,7 +269,7 @@ ddctl notebooks update 14515133 --from-file notebook-update.json --replace-all
 
 # Validate notebook payload and preflight timeseries queries
 ddctl notebooks validate --from-file notebook.json --from now-30d
-ddctl notebooks validate --from-file notebook.json --from now-30d --allow-empty-series
+ddctl notebooks validate --from-file notebook.json --from now-30d
 ```
 
 `notebooks create` and `notebooks update` accept these file shapes:

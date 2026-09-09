@@ -148,7 +148,7 @@ func runNotebooksValidateCmd(ctx context.Context, svcs app.Services, cfg app.Con
 	fromFile := fs.String("from-file", "", "path to notebook JSON payload")
 	from := fs.String("from", "now-30d", "metrics validation start time")
 	to := fs.String("to", "now", "metrics validation end time")
-	allowEmpty := fs.Bool("allow-empty-series", false, "allow timeseries metric queries with no data")
+	allowEmpty := fs.Bool("allow-empty-series", false, "no-data is always a warning; flag kept for compatibility")
 	if err := fs.Parse(args); err != nil {
 		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl notebooks validate --from-file <path> [--from <time>] [--to <time>] [--allow-empty-series]"), cfg)
 		return fail.CodeValidation

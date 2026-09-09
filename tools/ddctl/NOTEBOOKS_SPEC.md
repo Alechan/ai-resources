@@ -65,9 +65,9 @@ Local schema checks:
 Online query preflight (best effort):
 - Extract metric queries from timeseries cells.
 - Execute each with DataDog metrics API.
-- If query returns no series:
-  - warning by default
-  - validation failure unless `--allow-empty-series` is set.
+- Empty metric series in the selected window is a **warning**
+  (exit 0), not invalidity. `--allow-empty-series` is accepted
+  for compatibility.
 
 ## Known caveats captured by the CLI docs
 

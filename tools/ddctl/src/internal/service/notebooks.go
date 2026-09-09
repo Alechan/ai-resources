@@ -118,11 +118,7 @@ func (s *NotebooksService) Validate(ctx context.Context, input NotebookValidateI
 			return NotebookValidateResult{}, err
 		}
 		if len(metricsResult.Series) == 0 {
-			msg := fmt.Sprintf("query returned no data: %s", q)
-			if !input.AllowEmptySeries {
-				return NotebookValidateResult{}, fail.NewValidation(msg, "fix tags/wildcards or pass --allow-empty-series")
-			}
-			result.Warnings = append(result.Warnings, msg)
+			result.Warnings = append(result.Warnings, fmt.Sprintf("query returned no data: %s", q))
 		}
 	}
 	return result, nil

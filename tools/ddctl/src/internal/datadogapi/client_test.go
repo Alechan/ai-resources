@@ -70,6 +70,24 @@ func TestClient_PostInjectsCSRF(t *testing.T) {
 	}
 }
 
+func TestClient_APIErrorRedactsLogEvents(t *testing.T) {
+	t.Parallel()
+	c := testClient(t, roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusBadRequest,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(`{"hitCount":1,"result":{"events":[{"message":"secret"}]}}`)),
+		}, nil
+	}))
+	err := c.Get(context.Background(), "/api/v1/logs-analytics/list", &map[string]any{})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if strings.Contains(err.Error(), "secret") {
+		t.Fatalf("error leaked response body: %v", err)
+	}
+}
+
 func TestDebugLogger_DoesNotPrintCookieValues(t *testing.T) {
 	t.Parallel()
 	var buf strings.Builder
