@@ -19,6 +19,18 @@ func Execute(args []string, stdout, stderr io.Writer) int {
 		writeError(stderr, err)
 		return fail.ExitCode(err)
 	}
+	if opts.help {
+		printCommandHelp(stdout, cmd, cmdArgs)
+		return fail.CodeOK
+	}
+	if cmd == "help" {
+		if len(cmdArgs) == 0 {
+			printUsage(stdout)
+			return fail.CodeOK
+		}
+		printCommandHelp(stdout, cmdArgs[0], cmdArgs[1:])
+		return fail.CodeOK
+	}
 	if cmd == "" {
 		printUsage(stderr)
 		return fail.CodeValidation
@@ -48,9 +60,6 @@ func Execute(args []string, stdout, stderr io.Writer) int {
 		return runNotebooksCmd(ctx, svcs, cfg, cmdArgs, stdout, stderr)
 	case "dashboards":
 		return runDashboardsCmd(ctx, svcs, cfg, cmdArgs, stdout, stderr)
-	case "help", "--help", "-h":
-		printUsage(stdout)
-		return fail.CodeOK
 	default:
 		err := fail.NewValidation("unknown command", "use one of: init, doctor, logs-query, monitors-list, monitors-get, events-list, metrics-query, notebooks, dashboards")
 		writeError(stderr, err)
@@ -63,6 +72,7 @@ type rootOptions struct {
 	timeout time.Duration
 	json    bool
 	debug   bool
+	help    bool
 }
 
 func parseRootArgs(args []string) (rootOptions, string, []string, error) {
@@ -79,7 +89,7 @@ func parseRootArgs(args []string) (rootOptions, string, []string, error) {
 		a := args[i]
 		switch {
 		case a == "-h" || a == "--help":
-			return opts, "help", nil, nil
+			opts.help = true
 		case a == "--json":
 			opts.json = true
 		case a == "--debug":

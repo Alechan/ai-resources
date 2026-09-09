@@ -204,17 +204,21 @@ Use dashboard commands to export, validate, and write Datadog dashboards.
 ```bash
 ddctl dashboards get <id>
 ddctl --json dashboards get <id> > dashboard.json
-ddctl dashboards validate --from-file dashboard.json --from now-30d
+ddctl dashboards validate --from-file dashboard.json --from now-4h
+ddctl dashboards validate --from-file dashboard.json --template-variable environment=acceptance --from now-4h
+ddctl dashboards create --from-file dashboard.json --title "Copy" --dry-run
 ddctl dashboards create --from-file dashboard.json --title "Copy"
 ddctl dashboards update <id> --from-file dashboard.json --replace-all --dry-run
-ddctl dashboards update <id> --from-file dashboard.json --replace-all
+ddctl dashboards update <id> --from-file dashboard.json --replace-all --if-unmodified-since "<modified_at>"
 ```
 
 Dashboard caveats:
 - `PUT` is full replacement; `--replace-all` is required.
 - Create/update run validate unless `--skip-validate`.
-- Query preflight covers metrics and logs only; other widget data sources warn and skip.
-- `--expected-modified-at` is a client-side concurrency check; Datadog has no If-Match.
+- Query preflight covers metrics, logs (`search.query` included), formulas, and monitor IDs; other widget data sources warn and skip.
+- No-data in the selected window is a warning (exit 0).
+- `--if-unmodified-since` is a client-side concurrency check; Datadog has no If-Match.
+- `ddctl dashboards --help` and `ddctl dashboards <subcommand> --help` print command-specific usage.
 
 ## Validation
 
@@ -227,7 +231,8 @@ Dashboard caveats:
 - `ddctl notebooks get <id>` returns notebook details without error.
 - `ddctl notebooks validate --from-file <file>` reports timeseries queries and catches empty-series risks.
 - `ddctl dashboards get <id>` returns dashboard details without error.
-- `ddctl dashboards validate --from-file <file>` reports metric/log queries and catches empty-series risks.
+- `ddctl dashboards validate --from-file <file>` reports metric/log/monitor results; no-data is a warning.
+- `ddctl dashboards validate --help` prints command-specific usage and exits 0.
 
 ## Known obstacles and workarounds
 

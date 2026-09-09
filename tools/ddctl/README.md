@@ -285,23 +285,28 @@ Manage DataDog dashboards through browser-authenticated API endpoints.
 
 ```bash
 # Get dashboard summary (text)
-ddctl dashboards get cec-7ix-73w
+ddctl dashboards get bx7-nsy-pm5
 
 # Get raw dashboard JSON
-ddctl --json dashboards get cec-7ix-73w > dashboard.json
+ddctl --json dashboards get bx7-nsy-pm5 > dashboard.json
+
+# Command-specific help
+ddctl dashboards --help
+ddctl dashboards validate --help
 
 # Validate payload and preflight metric/log queries
-ddctl dashboards validate --from-file dashboard.json --from now-30d
-ddctl dashboards validate --from-file dashboard.json --from now-30d --allow-empty-series
+ddctl dashboards validate --from-file dashboard.json --from now-4h
+ddctl dashboards validate --from-file dashboard.json --from now-4h --template-variable environment=acceptance
+
+# Preview create/update without writing
+ddctl dashboards create --from-file dashboard.json --title "DELETE ME ddctl-dev copy" --dry-run
+ddctl dashboards update cec-7ix-73w --from-file dashboard.json --replace-all --dry-run
 
 # Create from a previous get (identity fields are stripped)
 ddctl dashboards create --from-file dashboard.json --title "DELETE ME ddctl-dev copy"
 
-# Preview an update without writing
-ddctl dashboards update cec-7ix-73w --from-file dashboard.json --replace-all --dry-run
-
 # Update (full replacement; explicit confirmation required)
-ddctl dashboards update cec-7ix-73w --from-file dashboard.json --replace-all
+ddctl dashboards update cec-7ix-73w --from-file dashboard.json --replace-all --if-unmodified-since "2026-09-09T16:40:00Z"
 ```
 
 `dashboards create` and `dashboards update` accept a raw dashboard object or
@@ -313,8 +318,11 @@ Notes:
 - `update` is full replacement (`PUT`), not patch.
 - `--replace-all` is mandatory for update.
 - Create/update run validate unless `--skip-validate`.
-- `--expected-modified-at` aborts if the remote `modified_at` does not match.
-- Query preflight covers metrics and logs only; other data sources warn and skip.
+- `--dry-run` on create/update does not write. `--diff` prints a semantic diff.
+- `--if-unmodified-since` (alias `--expected-modified-at`) aborts if the remote `modified_at` does not match.
+- Query preflight covers metrics (including formulas), logs (`query` / `query_string` / `search.query`), and monitor IDs.
+- No-data in the selected window is a warning (exit 0), not a validation failure.
+- Other data sources warn and skip.
 
 ## Troubleshooting
 

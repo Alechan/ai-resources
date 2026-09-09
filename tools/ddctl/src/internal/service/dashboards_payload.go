@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/fail"
@@ -26,24 +29,32 @@ var silentWidgetTypes = map[string]bool{
 }
 
 const (
-	queryKindMetrics = "metrics"
-	queryKindLogs    = "logs"
+	queryKindMetrics  = "metrics"
+	queryKindLogs     = "logs"
+	queryKindMonitors = "monitors"
 )
+
+var templateVarPattern = regexp.MustCompile(`\$[A-Za-z_][A-Za-z0-9_]*(?:\.value)?`)
 
 // DashboardQuery is one extracted widget query (or a skipped widget).
 type DashboardQuery struct {
 	Query         string `json:"query,omitempty"`
 	Kind          string `json:"kind,omitempty"`
 	WidgetType    string `json:"widget_type,omitempty"`
+	WidgetTitle   string `json:"widget_title,omitempty"`
+	WidgetIndex   string `json:"widget_index,omitempty"`
+	QueryIndex    int    `json:"query_index,omitempty"`
 	SkippedReason string `json:"skipped_reason,omitempty"`
 	DataSource    string `json:"data_source,omitempty"`
+	MonitorID     int64  `json:"monitor_id,omitempty"`
 }
 
 // DashboardQueries is the result of walking a dashboard's widgets.
 type DashboardQueries struct {
-	Metrics []DashboardQuery `json:"metrics"`
-	Logs    []DashboardQuery `json:"logs"`
-	Skipped []DashboardQuery `json:"skipped"`
+	Metrics  []DashboardQuery `json:"metrics"`
+	Logs     []DashboardQuery `json:"logs"`
+	Monitors []DashboardQuery `json:"monitors"`
+	Skipped  []DashboardQuery `json:"skipped"`
 }
 
 // NormalizeDashboardPayload accepts a raw dashboard object or
@@ -98,7 +109,7 @@ func PrepareDashboardUpdatePayload(env map[string]any, dashboardID string, repla
 }
 
 // ExtractDashboardQueries walks widgets (including group children) and
-// classifies metric, log, and skipped queries.
+// classifies metric, log, monitor, and skipped queries.
 func ExtractDashboardQueries(env map[string]any) (DashboardQueries, error) {
 	widgets, ok := env["widgets"].([]any)
 	if !ok {
@@ -111,7 +122,7 @@ func ExtractDashboardQueries(env map[string]any) (DashboardQueries, error) {
 	return out, nil
 }
 
-// DiffDashboardPayloads returns a text diff of two dashboard JSON objects.
+// DiffDashboardPayloads returns a JSON dump diff of two dashboard objects.
 func DiffDashboardPayloads(current, next map[string]any) string {
 	left := marshalStable(current)
 	right := marshalStable(next)
@@ -130,6 +141,114 @@ func DiffDashboardPayloads(current, next map[string]any) string {
 		b.WriteByte('\n')
 	}
 	return b.String()
+}
+
+// SemanticDiffDashboardPayloads summarizes title, template variables, groups, and widgets.
+func SemanticDiffDashboardPayloads(current, next map[string]any) string {
+	var lines []string
+	ct, _ := current["title"].(string)
+	nt, _ := next["title"].(string)
+	if ct != nt {
+		lines = append(lines, fmt.Sprintf("~ title: %s -> %s", ct, nt))
+	}
+	cd, _ := current["description"].(string)
+	nd, _ := next["description"].(string)
+	if cd != nd {
+		lines = append(lines, fmt.Sprintf("~ description: %s -> %s", cd, nd))
+	}
+
+	curVars := templateVarDefaults(current["template_variables"])
+	nextVars := templateVarDefaults(next["template_variables"])
+	names := map[string]bool{}
+	for n := range curVars {
+		names[n] = true
+	}
+	for n := range nextVars {
+		names[n] = true
+	}
+	ordered := make([]string, 0, len(names))
+	for n := range names {
+		ordered = append(ordered, n)
+	}
+	sort.Strings(ordered)
+	for _, name := range ordered {
+		cv, cok := curVars[name]
+		nv, nok := nextVars[name]
+		switch {
+		case cok && !nok:
+			lines = append(lines, fmt.Sprintf("- template variable %s", name))
+		case !cok && nok:
+			lines = append(lines, fmt.Sprintf("+ template variable %s: %s", name, nv))
+		case cv != nv:
+			lines = append(lines, fmt.Sprintf("~ template variable %s: %s -> %s", name, cv, nv))
+		}
+	}
+
+	curWidgets := collectWidgetSummaries(current["widgets"])
+	nextWidgets := collectWidgetSummaries(next["widgets"])
+	curCounts := countSummaries(curWidgets)
+	nextCounts := countSummaries(nextWidgets)
+	keys := map[string]bool{}
+	for k := range curCounts {
+		keys[k] = true
+	}
+	for k := range nextCounts {
+		keys[k] = true
+	}
+	orderedKeys := make([]string, 0, len(keys))
+	for k := range keys {
+		orderedKeys = append(orderedKeys, k)
+	}
+	sort.Strings(orderedKeys)
+	for _, key := range orderedKeys {
+		c := curCounts[key]
+		n := nextCounts[key]
+		switch {
+		case n > c:
+			for i := 0; i < n-c; i++ {
+				lines = append(lines, "+ "+formatSummaryKey(key, nextWidgets))
+			}
+		case c > n:
+			for i := 0; i < c-n; i++ {
+				lines = append(lines, "- "+formatSummaryKey(key, curWidgets))
+			}
+		}
+	}
+
+	if len(lines) == 0 {
+		return "no changes\n"
+	}
+	return strings.Join(lines, "\n") + "\n"
+}
+
+func applyTemplateVariables(query string, vars map[string]string) string {
+	if query == "" || len(vars) == 0 {
+		return query
+	}
+	names := make([]string, 0, len(vars))
+	for n := range vars {
+		names = append(names, n)
+	}
+	sort.Slice(names, func(i, j int) bool { return len(names[i]) > len(names[j]) })
+	for _, name := range names {
+		query = strings.ReplaceAll(query, "$"+name+".value", vars[name])
+		query = strings.ReplaceAll(query, "$"+name, vars[name])
+	}
+	return query
+}
+
+func unresolvedTemplateVariables(query string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, m := range templateVarPattern.FindAllString(query, -1) {
+		if seen[m] {
+			continue
+		}
+		seen[m] = true
+		out = append(out, m)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func assertDashboardRequired(payload map[string]any) error {
@@ -182,7 +301,15 @@ func assertWidgets(widgets []any) error {
 }
 
 func extractFromWidgets(widgets []any, out *DashboardQueries) error {
-	for _, raw := range widgets {
+	return extractFromWidgetsAt(widgets, "", out)
+}
+
+func extractFromWidgetsAt(widgets []any, prefix string, out *DashboardQueries) error {
+	for i, raw := range widgets {
+		idx := strconv.Itoa(i)
+		if prefix != "" {
+			idx = prefix + "." + idx
+		}
 		m := mustMap(raw)
 		if m == nil {
 			continue
@@ -191,25 +318,36 @@ func extractFromWidgets(widgets []any, out *DashboardQueries) error {
 		if def == nil {
 			continue
 		}
-		widgetType, _ := def["type"].(string)
-		if err := extractFromDefinition(def, widgetType, out); err != nil {
+		meta := widgetMeta{
+			Type:  stringField(def["type"]),
+			Title: widgetTitle(def),
+			Index: idx,
+		}
+		if err := extractFromDefinition(def, meta, out); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func extractFromDefinition(def map[string]any, widgetType string, out *DashboardQueries) error {
-	if widgetType == "group" {
+type widgetMeta struct {
+	Type  string
+	Title string
+	Index string
+}
+
+func extractFromDefinition(def map[string]any, meta widgetMeta, out *DashboardQueries) error {
+	if meta.Type == "group" {
 		nested, _ := def["widgets"].([]any)
-		return extractFromWidgets(nested, out)
+		return extractFromWidgetsAt(nested, meta.Index, out)
 	}
 
-	beforeMetrics, beforeLogs, beforeSkipped := len(out.Metrics), len(out.Logs), len(out.Skipped)
+	beforeMetrics, beforeLogs, beforeMonitors, beforeSkipped := len(out.Metrics), len(out.Logs), len(out.Monitors), len(out.Skipped)
+	extractMonitorIDs(def, meta, out)
 
-	if widgetType == "log_stream" {
+	if meta.Type == "log_stream" {
 		if q, _ := def["query"].(string); strings.TrimSpace(q) != "" {
-			out.Logs = append(out.Logs, DashboardQuery{Query: q, Kind: queryKindLogs, WidgetType: widgetType})
+			out.Logs = append(out.Logs, meta.dashQuery(q, queryKindLogs, ""))
 		}
 	}
 
@@ -220,30 +358,58 @@ func extractFromDefinition(def map[string]any, widgetType string, out *Dashboard
 			continue
 		}
 		if q, _ := req["q"].(string); strings.TrimSpace(q) != "" {
-			out.Metrics = append(out.Metrics, DashboardQuery{Query: q, Kind: queryKindMetrics, WidgetType: widgetType})
+			out.Metrics = append(out.Metrics, meta.dashQuery(q, queryKindMetrics, ""))
 		}
-		if err := extractQueryList(req["queries"], widgetType, out); err != nil {
+		if err := extractQueryList(req["queries"], meta, out); err != nil {
 			return err
 		}
 		if qobj := mustMap(req["query"]); qobj != nil {
-			if err := extractQueryObject(qobj, widgetType, out); err != nil {
+			if err := extractQueryObject(qobj, meta, out); err != nil {
 				return err
 			}
 		}
 	}
 
-	extracted := len(out.Metrics) > beforeMetrics || len(out.Logs) > beforeLogs || len(out.Skipped) > beforeSkipped
-	if extracted || silentWidgetTypes[widgetType] || widgetType == "" {
+	extracted := len(out.Metrics) > beforeMetrics || len(out.Logs) > beforeLogs || len(out.Monitors) > beforeMonitors || len(out.Skipped) > beforeSkipped
+	if extracted || silentWidgetTypes[meta.Type] || meta.Type == "" {
 		return nil
 	}
 	out.Skipped = append(out.Skipped, DashboardQuery{
-		WidgetType:    widgetType,
-		SkippedReason: "no metrics/logs query in widget type " + widgetType,
+		WidgetType:    meta.Type,
+		WidgetTitle:   meta.Title,
+		WidgetIndex:   meta.Index,
+		SkippedReason: "no metrics/logs query in widget type " + meta.Type,
 	})
 	return nil
 }
 
-func extractQueryList(raw any, widgetType string, out *DashboardQueries) error {
+func extractMonitorIDs(def map[string]any, meta widgetMeta, out *DashboardQueries) {
+	for _, key := range []string{"alert_id", "monitor_id"} {
+		if id, ok := parseMonitorID(def[key]); ok {
+			out.Monitors = append(out.Monitors, DashboardQuery{
+				Kind:        queryKindMonitors,
+				WidgetType:  meta.Type,
+				WidgetTitle: meta.Title,
+				WidgetIndex: meta.Index,
+				MonitorID:   id,
+				Query:       strconv.FormatInt(id, 10),
+			})
+		}
+	}
+}
+
+func (m widgetMeta) dashQuery(query, kind, ds string) DashboardQuery {
+	return DashboardQuery{
+		Query:       query,
+		Kind:        kind,
+		WidgetType:  m.Type,
+		WidgetTitle: m.Title,
+		WidgetIndex: m.Index,
+		DataSource:  ds,
+	}
+}
+
+func extractQueryList(raw any, meta widgetMeta, out *DashboardQueries) error {
 	queries, ok := raw.([]any)
 	if !ok {
 		return nil
@@ -253,31 +419,47 @@ func extractQueryList(raw any, widgetType string, out *DashboardQueries) error {
 		if q == nil {
 			continue
 		}
-		if err := extractQueryObject(q, widgetType, out); err != nil {
+		if err := extractQueryObject(q, meta, out); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func extractQueryObject(q map[string]any, widgetType string, out *DashboardQueries) error {
-	ds, _ := q["data_source"].(string)
-	query, _ := q["query"].(string)
-	if strings.TrimSpace(query) == "" {
-		query, _ = q["query_string"].(string)
+func queryTextFromObject(q map[string]any) string {
+	if s, _ := q["query"].(string); strings.TrimSpace(s) != "" {
+		return s
 	}
+	if s, _ := q["query_string"].(string); strings.TrimSpace(s) != "" {
+		return s
+	}
+	if search := mustMap(q["search"]); search != nil {
+		if s, _ := search["query"].(string); strings.TrimSpace(s) != "" {
+			return s
+		}
+	}
+	return ""
+}
+
+func extractQueryObject(q map[string]any, meta widgetMeta, out *DashboardQueries) error {
+	ds, _ := q["data_source"].(string)
+	query := queryTextFromObject(q)
 	kind := classifyDataSource(ds)
 	switch kind {
 	case queryKindMetrics:
 		if strings.TrimSpace(query) == "" {
 			return fail.NewValidation("invalid metric query entry", `each metrics query entry must include non-empty "query"`)
 		}
-		out.Metrics = append(out.Metrics, DashboardQuery{Query: query, Kind: queryKindMetrics, WidgetType: widgetType, DataSource: ds})
+		dq := meta.dashQuery(query, queryKindMetrics, ds)
+		dq.QueryIndex = len(out.Metrics)
+		out.Metrics = append(out.Metrics, dq)
 	case queryKindLogs:
 		if strings.TrimSpace(query) == "" {
-			return fail.NewValidation("invalid log query entry", `each logs query entry must include non-empty "query" or "query_string"`)
+			query = "*"
 		}
-		out.Logs = append(out.Logs, DashboardQuery{Query: query, Kind: queryKindLogs, WidgetType: widgetType, DataSource: ds})
+		dq := meta.dashQuery(query, queryKindLogs, ds)
+		dq.QueryIndex = len(out.Logs)
+		out.Logs = append(out.Logs, dq)
 	default:
 		if ds == "" && strings.TrimSpace(query) == "" {
 			return nil
@@ -288,7 +470,9 @@ func extractQueryObject(q map[string]any, widgetType string, out *DashboardQueri
 		}
 		out.Skipped = append(out.Skipped, DashboardQuery{
 			Query:         query,
-			WidgetType:    widgetType,
+			WidgetType:    meta.Type,
+			WidgetTitle:   meta.Title,
+			WidgetIndex:   meta.Index,
 			DataSource:    ds,
 			SkippedReason: reason,
 		})
@@ -305,6 +489,163 @@ func classifyDataSource(ds string) string {
 	default:
 		return ""
 	}
+}
+
+func parseMonitorID(v any) (int64, bool) {
+	switch x := v.(type) {
+	case string:
+		n, err := strconv.ParseInt(strings.TrimSpace(x), 10, 64)
+		return n, err == nil && n > 0
+	case float64:
+		n := int64(x)
+		return n, float64(n) == x && n > 0
+	case int:
+		return int64(x), x > 0
+	case int64:
+		return x, x > 0
+	case json.Number:
+		n, err := x.Int64()
+		return n, err == nil && n > 0
+	default:
+		return 0, false
+	}
+}
+
+func widgetTitle(def map[string]any) string {
+	if t := strings.TrimSpace(stringField(def["title"])); t != "" {
+		return t
+	}
+	c := strings.TrimSpace(stringField(def["content"]))
+	if c == "" {
+		return ""
+	}
+	if i := strings.Index(c, "\n"); i >= 0 {
+		c = c[:i]
+	}
+	if len(c) > 80 {
+		c = c[:80]
+	}
+	return c
+}
+
+func stringField(v any) string {
+	s, _ := v.(string)
+	return s
+}
+
+type widgetSummary struct {
+	Kind  string
+	Type  string
+	Title string
+	Kids  int
+}
+
+func collectWidgetSummaries(raw any) []widgetSummary {
+	widgets, _ := raw.([]any)
+	var out []widgetSummary
+	collectWidgetSummariesAt(widgets, &out)
+	return out
+}
+
+func collectWidgetSummariesAt(widgets []any, out *[]widgetSummary) {
+	for _, raw := range widgets {
+		m := mustMap(raw)
+		if m == nil {
+			continue
+		}
+		def := mustMap(m["definition"])
+		if def == nil {
+			continue
+		}
+		t := stringField(def["type"])
+		title := widgetTitle(def)
+		if t == "group" {
+			nested, _ := def["widgets"].([]any)
+			*out = append(*out, widgetSummary{Kind: "group", Type: t, Title: title, Kids: countLeafWidgets(nested)})
+			collectWidgetSummariesAt(nested, out)
+			continue
+		}
+		*out = append(*out, widgetSummary{Kind: "widget", Type: t, Title: title})
+	}
+}
+
+func countLeafWidgets(widgets []any) int {
+	n := 0
+	for _, raw := range widgets {
+		m := mustMap(raw)
+		if m == nil {
+			continue
+		}
+		def := mustMap(m["definition"])
+		if def == nil {
+			continue
+		}
+		if stringField(def["type"]) == "group" {
+			nested, _ := def["widgets"].([]any)
+			n += countLeafWidgets(nested)
+			continue
+		}
+		n++
+	}
+	return n
+}
+
+func summaryKey(s widgetSummary) string {
+	return s.Kind + "\t" + s.Type + "\t" + s.Title
+}
+
+func countSummaries(items []widgetSummary) map[string]int {
+	out := map[string]int{}
+	for _, s := range items {
+		out[summaryKey(s)]++
+	}
+	return out
+}
+
+func formatSummaryKey(key string, items []widgetSummary) string {
+	for _, s := range items {
+		if summaryKey(s) == key {
+			return formatSummary(s)
+		}
+	}
+	return key
+}
+
+func formatSummary(s widgetSummary) string {
+	title := s.Title
+	if title == "" {
+		title = s.Type
+	}
+	switch s.Kind {
+	case "group":
+		line := "group: " + title
+		if s.Kids > 0 {
+			line += fmt.Sprintf("\n+ %d widgets", s.Kids)
+		}
+		return line
+	default:
+		if s.Title != "" {
+			return fmt.Sprintf("widget %s: %s", s.Type, s.Title)
+		}
+		return "widget " + s.Type + ":"
+	}
+}
+
+func templateVarDefaults(raw any) map[string]string {
+	arr, _ := raw.([]any)
+	out := map[string]string{}
+	for _, item := range arr {
+		m := mustMap(item)
+		if m == nil {
+			continue
+		}
+		name := stringField(m["name"])
+		if name == "" {
+			continue
+		}
+		out[name] = stringField(m["default"])
+	}
+	return out
 }
 
 func cloneMap(in map[string]any) map[string]any {

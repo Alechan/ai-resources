@@ -15,9 +15,9 @@ func TestNormalizeDashboardPayload(t *testing.T) {
 }`
 
 	tests := []struct {
-		name    string
-		raw     string
-		wantErr string
+		name      string
+		raw       string
+		wantErr   string
 		wantTitle string
 	}{
 		{
@@ -227,6 +227,7 @@ func TestExtractDashboardQueries(t *testing.T) {
 		wantMetrics  int
 		wantLogs     int
 		wantSkipped  int
+		wantMonitors int
 		wantMetricQ  string
 		wantLogQ     string
 		wantErr      string
@@ -279,11 +280,37 @@ func TestExtractDashboardQueries(t *testing.T) {
 			wantLogQ: "service:foo",
 		},
 		{
+			name: "logs search.query query_value",
+			raw: `{
+  "title":"t","layout_type":"ordered",
+  "widgets":[{"definition":{"type":"query_value","title":"Beaver - Successful Dixa Conversation Created","requests":[{"queries":[{"data_source":"logs","name":"query1","search":{"query":"service:beaver* kube_namespace:$environment.value"},"compute":{"aggregation":"count"},"indexes":["*"],"storage":"hot"}],"formulas":[{"formula":"default_zero(query1)"}]}]}}]
+}`,
+			wantLogs: 1,
+			wantLogQ: "service:beaver* kube_namespace:$environment.value",
+		},
+		{
+			name: "logs search.query empty is not invalid",
+			raw: `{
+  "title":"t","layout_type":"ordered",
+  "widgets":[{"definition":{"type":"query_value","requests":[{"queries":[{"data_source":"logs","name":"query1","search":{"query":""},"compute":{"aggregation":"count"}}]}]}}]
+}`,
+			wantLogs: 1,
+			wantLogQ: "*",
+		},
+		{
 			name: "note widget",
 			raw: `{
   "title":"t","layout_type":"ordered",
   "widgets":[{"definition":{"type":"note","content":"hello"}}]
 }`,
+		},
+		{
+			name: "alert_graph monitor id",
+			raw: `{
+  "title":"t","layout_type":"ordered",
+  "widgets":[{"definition":{"type":"alert_graph","title":"Heartbeat","alert_id":"123456789"}}]
+}`,
+			wantMonitors: 1,
 		},
 		{
 			name: "slo widget skipped",
@@ -337,6 +364,9 @@ func TestExtractDashboardQueries(t *testing.T) {
 			if len(got.Skipped) != tc.wantSkipped {
 				t.Fatalf("skipped = %#v, want %d", got.Skipped, tc.wantSkipped)
 			}
+			if len(got.Monitors) != tc.wantMonitors {
+				t.Fatalf("monitors = %#v, want %d", got.Monitors, tc.wantMonitors)
+			}
 			if tc.wantMetricQ != "" && got.Metrics[0].Query != tc.wantMetricQ {
 				t.Fatalf("metrics[0].Query = %q", got.Metrics[0].Query)
 			}
@@ -344,6 +374,68 @@ func TestExtractDashboardQueries(t *testing.T) {
 				t.Fatalf("logs[0].Query = %q", got.Logs[0].Query)
 			}
 		})
+	}
+}
+
+func TestApplyTemplateVariables(t *testing.T) {
+	t.Parallel()
+	got := applyTemplateVariables(
+		`sum:beaver.http_request.count{kube_namespace:$environment.value}.as_rate()`,
+		map[string]string{"environment": "acceptance"},
+	)
+	want := `sum:beaver.http_request.count{kube_namespace:acceptance}.as_rate()`
+	if got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+}
+
+func TestUnresolvedTemplateVariables(t *testing.T) {
+	t.Parallel()
+	got := unresolvedTemplateVariables(`avg:x{kube_namespace:$environment.value,env:$env}`)
+	if len(got) != 2 {
+		t.Fatalf("got %#v", got)
+	}
+}
+
+func TestSemanticDiffDashboardPayloads(t *testing.T) {
+	t.Parallel()
+	current := map[string]any{
+		"title": "Beaver — NPS",
+		"template_variables": []any{
+			map[string]any{"name": "kube_namespace", "default": "acceptance"},
+		},
+		"widgets": []any{
+			map[string]any{"definition": map[string]any{"type": "note", "content": "legacy OTEL widget"}},
+			map[string]any{"definition": map[string]any{"type": "group", "title": "Overview", "widgets": []any{
+				map[string]any{"definition": map[string]any{"type": "timeseries", "title": "CPU"}},
+			}}},
+		},
+	}
+	next := map[string]any{
+		"title": "Beaver — NPS",
+		"template_variables": []any{
+			map[string]any{"name": "kube_namespace", "default": "production"},
+		},
+		"widgets": []any{
+			map[string]any{"definition": map[string]any{"type": "group", "title": "Overview", "widgets": []any{
+				map[string]any{"definition": map[string]any{"type": "timeseries", "title": "CPU"}},
+				map[string]any{"definition": map[string]any{"type": "query_value", "title": "NPS"}},
+			}}},
+			map[string]any{"definition": map[string]any{"type": "group", "title": "AI enhancement", "widgets": []any{
+				map[string]any{"definition": map[string]any{"type": "note", "content": "a"}},
+			}}},
+		},
+	}
+	got := SemanticDiffDashboardPayloads(current, next)
+	for _, want := range []string{
+		"+ group: AI enhancement",
+		"~ template variable kube_namespace:",
+		"acceptance -> production",
+		"- widget note:",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("diff missing %q:\n%s", want, got)
+		}
 	}
 }
 

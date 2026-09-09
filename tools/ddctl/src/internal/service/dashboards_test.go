@@ -317,7 +317,7 @@ func TestDashboardsValidate_RejectsMissingTitle(t *testing.T) {
 	}
 }
 
-func TestDashboardsValidate_MetricEmptySeriesFails(t *testing.T) {
+func TestDashboardsValidate_MetricEmptySeriesWarns(t *testing.T) {
 	t.Parallel()
 	dd := testDashClient(dashRoundTripper(func(req *http.Request) (*http.Response, error) {
 		if strings.Contains(req.URL.Path, "/api/v1/query") {
@@ -329,9 +329,15 @@ func TestDashboardsValidate_MetricEmptySeriesFails(t *testing.T) {
 	metrics := NewMetricsQueryService(dd)
 	svc := NewDashboardsService(dd, metrics, NewLogsQueryService(dd), "datadoghq.com")
 	file := writeDashboardFile(t, metricDashboardJSON)
-	_, err := svc.Validate(context.Background(), DashboardValidateInput{FilePath: file, From: "now-1h", To: "now"})
-	if err == nil || !strings.Contains(err.Error(), "query returned no data") {
-		t.Fatalf("error = %v", err)
+	got, err := svc.Validate(context.Background(), DashboardValidateInput{FilePath: file, From: "now-1h", To: "now"})
+	if err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+	if got.MetricsNoData != 1 {
+		t.Fatalf("MetricsNoData = %d warnings=%v", got.MetricsNoData, got.Warnings)
+	}
+	if len(got.Warnings) == 0 {
+		t.Fatal("expected no-data warning")
 	}
 }
 
@@ -366,9 +372,71 @@ func TestDashboardsValidate_LogQueryCountOnly(t *testing.T) {
 	}))
 	svc := NewDashboardsService(dd, NewMetricsQueryService(dd), NewLogsQueryService(dd), "datadoghq.com")
 	file := writeDashboardFile(t, logDashboardJSON)
-	_, err := svc.Validate(context.Background(), DashboardValidateInput{FilePath: file, From: "now-1h", To: "now"})
-	if err == nil || !strings.Contains(err.Error(), "query returned no data") {
-		t.Fatalf("error = %v", err)
+	got, err := svc.Validate(context.Background(), DashboardValidateInput{FilePath: file, From: "now-1h", To: "now"})
+	if err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+	if got.LogsNoData != 1 {
+		t.Fatalf("LogsNoData = %d warnings=%v", got.LogsNoData, got.Warnings)
+	}
+}
+
+func TestDashboardsValidate_SubstitutesTemplateVariables(t *testing.T) {
+	t.Parallel()
+	var gotQuery string
+	dd := testDashClient(dashRoundTripper(func(req *http.Request) (*http.Response, error) {
+		gotQuery = req.URL.Query().Get("query")
+		return jsonResponse(http.StatusOK, `{"status":"ok","series":[{"metric":"x","pointlist":[[1,1]]}]}`), nil
+	}))
+	svc := NewDashboardsService(dd, NewMetricsQueryService(dd), NewLogsQueryService(dd), "datadoghq.com")
+	file := writeDashboardFile(t, `{
+  "title": "t",
+  "layout_type": "ordered",
+  "widgets": [{"definition": {"type": "timeseries", "title": "API", "requests": [{"q": "avg:system.cpu.user{kube_namespace:$environment.value}"}]}}]
+}`)
+	got, err := svc.Validate(context.Background(), DashboardValidateInput{
+		FilePath:          file,
+		From:              "now-1h",
+		To:                "now",
+		TemplateVariables: map[string]string{"environment": "acceptance"},
+	})
+	if err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+	if !strings.Contains(gotQuery, "kube_namespace:acceptance") {
+		t.Fatalf("preflight query = %q", gotQuery)
+	}
+	if got.MetricsValid != 1 {
+		t.Fatalf("MetricsValid = %d", got.MetricsValid)
+	}
+}
+
+func TestDashboardsCreate_DryRunDoesNotPost(t *testing.T) {
+	t.Parallel()
+	called := false
+	dd := testDashClient(dashRoundTripper(func(req *http.Request) (*http.Response, error) {
+		called = true
+		return jsonResponse(http.StatusOK, `{}`), nil
+	}))
+	svc := NewDashboardsService(dd, nil, nil, "datadoghq.com")
+	file := writeDashboardFile(t, noteDashboardJSON)
+	got, err := svc.Create(context.Background(), DashboardMutationInput{
+		FilePath:     file,
+		Title:        "DELETE ME ddctl-dev copy",
+		SkipValidate: true,
+		DryRun:       true,
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if called {
+		t.Fatal("HTTP should not be called for create --dry-run")
+	}
+	if got["dry_run"] != true {
+		t.Fatalf("dry_run = %v", got["dry_run"])
+	}
+	if got["title"] != "DELETE ME ddctl-dev copy" {
+		t.Fatalf("title = %v", got["title"])
 	}
 }
 

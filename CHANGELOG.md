@@ -5,8 +5,10 @@
 ### Added
 
 - `ddctl dashboards`: get, validate, create, and update DataDog dashboards
-  (query preflight for metrics/logs, `--replace-all`, `--dry-run`,
-  `--expected-modified-at`)
+  (query preflight for metrics/logs/monitor IDs, `--replace-all`, `--dry-run`,
+  `--diff`, `--if-unmodified-since`, `--template-variable`)
+- Nested `ddctl` help: `ddctl dashboards --help` and
+  `ddctl dashboards <subcommand> --help` print command-specific usage and exit 0
 - `slackctl conversation export` now preserves root and thread-reply reactions
   in normalized JSON schema version 2, resolves returned reactor IDs as
   participants, and renders clearly labeled reaction metadata in Markdown;
@@ -35,6 +37,9 @@
 
 ### Changed
 
+- `ddctl dashboards validate` accepts unmodified `dashboards get` payloads
+  (including logs `search.query`), treats no-data as a warning (exit 0), and
+  prints widget-attributed query results
 - Hardened `claude-statusline` with a pinned `ccusage` fallback, cached monthly totals, and graceful segment fallback behavior.
 - Tightened `claude-statusline` to version-gate PATH `ccusage` binaries and clarified manual install documentation.
 - Fixed `claude-statusline` daily cost reporting to use an explicit calendar-day `ccusage daily` query instead of parsing `statusline` output.

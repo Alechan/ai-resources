@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -18,33 +19,43 @@ type DashboardGetInput struct {
 type DashboardGetResult map[string]any
 
 type DashboardMutationInput struct {
-	FilePath             string
-	Title                string
-	ID                   string
-	SkipValidate         bool
-	AllowEmptySeries     bool
-	From                 string
-	To                   string
-	DryRun               bool
-	ExpectedModifiedAt   string
+	FilePath           string
+	Title              string
+	ID                 string
+	SkipValidate       bool
+	AllowEmptySeries   bool
+	From               string
+	To                 string
+	DryRun             bool
+	ShowDiff           bool
+	ExpectedModifiedAt string
+	TemplateVariables  map[string]string
 }
 
 type DashboardMutationResult map[string]any
 
 type DashboardValidateInput struct {
-	FilePath         string
-	From             string
-	To               string
-	AllowEmptySeries bool
+	FilePath          string
+	From              string
+	To                string
+	AllowEmptySeries  bool
+	TemplateVariables map[string]string
 }
 
 type DashboardValidateResult struct {
-	QueryCount       int               `json:"query_count"`
-	Metrics          []string          `json:"metrics"`
-	Logs             []string          `json:"logs"`
-	Skipped          []DashboardQuery  `json:"skipped"`
-	Warnings         []string          `json:"warnings"`
-	AllowEmptySeries bool              `json:"allow_empty_series"`
+	Structure        string           `json:"structure"`
+	QueryCount       int              `json:"query_count"`
+	MetricsValid     int              `json:"metrics_valid"`
+	MetricsNoData    int              `json:"metrics_no_data"`
+	LogsValid        int              `json:"logs_valid"`
+	LogsNoData       int              `json:"logs_no_data"`
+	MonitorsValid    int              `json:"monitors_valid"`
+	Metrics          []string         `json:"metrics"`
+	Logs             []string         `json:"logs"`
+	Monitors         []string         `json:"monitors,omitempty"`
+	Skipped          []DashboardQuery `json:"skipped"`
+	Warnings         []string         `json:"warnings"`
+	AllowEmptySeries bool             `json:"allow_empty_series"`
 }
 
 type DashboardsService struct {
@@ -82,9 +93,19 @@ func (s *DashboardsService) Create(ctx context.Context, input DashboardMutationI
 		return nil, err
 	}
 	if !input.SkipValidate {
-		if _, err := s.validatePrepared(ctx, payload, input.From, input.To, input.AllowEmptySeries); err != nil {
+		if _, err := s.validatePrepared(ctx, payload, input.From, input.To, input.AllowEmptySeries, input.TemplateVariables); err != nil {
 			return nil, err
 		}
+	}
+	if input.DryRun {
+		widgets, _ := payload["widgets"].([]any)
+		title, _ := payload["title"].(string)
+		return DashboardMutationResult{
+			"dry_run":      true,
+			"title":        title,
+			"layout_type":  payload["layout_type"],
+			"widget_count": len(widgets),
+		}, nil
 	}
 	var out map[string]any
 	if err := s.dd.Post(ctx, "/api/v1/dashboard", payload, &out); err != nil {
@@ -105,12 +126,14 @@ func (s *DashboardsService) Update(ctx context.Context, input DashboardMutationI
 		return nil, err
 	}
 	if !input.SkipValidate {
-		if _, err := s.validatePrepared(ctx, payload, input.From, input.To, input.AllowEmptySeries); err != nil {
+		if _, err := s.validatePrepared(ctx, payload, input.From, input.To, input.AllowEmptySeries, input.TemplateVariables); err != nil {
 			return nil, err
 		}
 	}
 
-	if strings.TrimSpace(input.ExpectedModifiedAt) != "" || input.DryRun {
+	needGet := strings.TrimSpace(input.ExpectedModifiedAt) != "" || input.DryRun || input.ShowDiff
+	var semantic string
+	if needGet {
 		current, err := s.Get(ctx, DashboardGetInput{ID: input.ID})
 		if err != nil {
 			return nil, err
@@ -119,34 +142,46 @@ func (s *DashboardsService) Update(ctx context.Context, input DashboardMutationI
 			got := fmt.Sprint(current["modified_at"])
 			if !modifiedAtMatches(got, input.ExpectedModifiedAt) {
 				return nil, fail.NewValidation(
-					"dashboard modified_at does not match --expected-modified-at",
+					"dashboard modified_at does not match --if-unmodified-since",
 					fmt.Sprintf("remote modified_at is %s", got),
 				)
 			}
 		}
+		left := cloneMap(map[string]any(current))
+		right := cloneMap(payload)
+		for _, k := range dashboardIdentityFields {
+			delete(left, k)
+			delete(right, k)
+		}
+		semantic = SemanticDiffDashboardPayloads(left, right)
 		if input.DryRun {
-			left := cloneMap(map[string]any(current))
-			right := cloneMap(payload)
-			for _, k := range dashboardIdentityFields {
-				delete(left, k)
-				delete(right, k)
-			}
-			diff := DiffDashboardPayloads(left, right)
 			return DashboardMutationResult{
-				"dry_run": true,
-				"id":      input.ID,
-				"url":     dashboardCanonicalURL(s.site, input.ID),
-				"diff":    diff,
+				"dry_run":   true,
+				"id":        input.ID,
+				"url":       dashboardCanonicalURL(s.site, input.ID),
+				"diff":      semantic,
+				"json_diff": DiffDashboardPayloads(left, right),
 			}, nil
 		}
 	}
 
-	path := fmt.Sprintf("/api/v1/dashboard/%s", input.ID)
+	out, err := s.putDashboard(ctx, input.ID, payload)
+	if err != nil {
+		return nil, err
+	}
+	if semantic != "" {
+		out["diff"] = semantic
+	}
+	return out, nil
+}
+
+func (s *DashboardsService) putDashboard(ctx context.Context, id string, payload map[string]any) (DashboardMutationResult, error) {
+	path := fmt.Sprintf("/api/v1/dashboard/%s", id)
 	var out map[string]any
 	if err := s.dd.Put(ctx, path, payload, &out); err != nil {
 		return nil, err
 	}
-	attachDashboardURL(out, s.site, input.ID)
+	attachDashboardURL(out, s.site, id)
 	return out, nil
 }
 
@@ -158,10 +193,10 @@ func (s *DashboardsService) Validate(ctx context.Context, input DashboardValidat
 	if err := assertDashboardRequired(env); err != nil {
 		return DashboardValidateResult{}, err
 	}
-	return s.validatePrepared(ctx, env, input.From, input.To, input.AllowEmptySeries)
+	return s.validatePrepared(ctx, env, input.From, input.To, input.AllowEmptySeries, input.TemplateVariables)
 }
 
-func (s *DashboardsService) validatePrepared(ctx context.Context, env map[string]any, from, to string, allowEmpty bool) (DashboardValidateResult, error) {
+func (s *DashboardsService) validatePrepared(ctx context.Context, env map[string]any, from, to string, allowEmpty bool, vars map[string]string) (DashboardValidateResult, error) {
 	if from == "" {
 		from = "now-30d"
 	}
@@ -173,6 +208,7 @@ func (s *DashboardsService) validatePrepared(ctx context.Context, env map[string
 		return DashboardValidateResult{}, err
 	}
 	result := DashboardValidateResult{
+		Structure:        "valid",
 		Skipped:          extracted.Skipped,
 		AllowEmptySeries: allowEmpty,
 	}
@@ -182,48 +218,91 @@ func (s *DashboardsService) validatePrepared(ctx context.Context, env map[string
 	for _, q := range extracted.Logs {
 		result.Logs = append(result.Logs, q.Query)
 	}
+	for _, q := range extracted.Monitors {
+		result.Monitors = append(result.Monitors, q.Query)
+	}
 	result.QueryCount = len(result.Metrics) + len(result.Logs)
 	for _, q := range extracted.Skipped {
-		msg := q.SkippedReason
-		if q.WidgetType != "" {
-			msg = q.WidgetType + ": " + q.SkippedReason
-		}
-		result.Warnings = append(result.Warnings, msg)
+		result.Warnings = append(result.Warnings, skippedWarning(q))
 	}
 
 	for _, q := range extracted.Metrics {
-		metricsResult, err := s.metrics.Run(ctx, MetricsQueryInput{Query: q.Query, From: from, To: to})
+		query := applyTemplateVariables(q.Query, vars)
+		for _, unresolved := range unresolvedTemplateVariables(query) {
+			result.Warnings = append(result.Warnings, queryWarning(q, "unresolved template variable "+unresolved))
+		}
+		metricsResult, err := s.metrics.Run(ctx, MetricsQueryInput{Query: query, From: from, To: to})
 		if err != nil {
-			return DashboardValidateResult{}, err
+			return DashboardValidateResult{}, wrapQueryError(q, err)
 		}
 		if len(metricsResult.Series) == 0 {
-			msg := fmt.Sprintf("query returned no data: %s", q.Query)
-			if !allowEmpty {
-				return DashboardValidateResult{}, fail.NewValidation(msg, "fix tags/wildcards or pass --allow-empty-series")
-			}
-			result.Warnings = append(result.Warnings, msg)
+			result.MetricsNoData++
+			result.Warnings = append(result.Warnings, queryWarning(q, "no data in selected window"))
+			continue
 		}
+		result.MetricsValid++
 	}
 	for _, q := range extracted.Logs {
+		query := applyTemplateVariables(q.Query, vars)
+		for _, unresolved := range unresolvedTemplateVariables(query) {
+			result.Warnings = append(result.Warnings, queryWarning(q, "unresolved template variable "+unresolved))
+		}
 		logsResult, err := s.logs.Run(ctx, LogsQueryInput{
-			Query:     q.Query,
+			Query:     query,
 			From:      from,
 			To:        to,
 			Limit:     1,
 			CountOnly: true,
 		})
 		if err != nil {
-			return DashboardValidateResult{}, err
+			return DashboardValidateResult{}, wrapQueryError(q, err)
 		}
 		if logsResult.HitCount == 0 {
-			msg := fmt.Sprintf("query returned no data: %s", q.Query)
-			if !allowEmpty {
-				return DashboardValidateResult{}, fail.NewValidation(msg, "fix tags/wildcards or pass --allow-empty-series")
-			}
-			result.Warnings = append(result.Warnings, msg)
+			result.LogsNoData++
+			result.Warnings = append(result.Warnings, queryWarning(q, "no data in selected window"))
+			continue
 		}
+		result.LogsValid++
 	}
+	for _, q := range extracted.Monitors {
+		path := fmt.Sprintf("/api/v1/monitor/%d", q.MonitorID)
+		var mon map[string]any
+		if err := s.dd.Get(ctx, path, &mon); err != nil {
+			return DashboardValidateResult{}, wrapQueryError(q, err)
+		}
+		result.MonitorsValid++
+	}
+	_ = allowEmpty
 	return result, nil
+}
+
+func skippedWarning(q DashboardQuery) string {
+	msg := q.SkippedReason
+	if q.WidgetType != "" {
+		msg = q.WidgetType + ": " + q.SkippedReason
+	}
+	if q.WidgetTitle != "" {
+		return fmt.Sprintf("widget %q: %s", q.WidgetTitle, msg)
+	}
+	return msg
+}
+
+func queryWarning(q DashboardQuery, msg string) string {
+	if q.WidgetTitle != "" {
+		return fmt.Sprintf("widget %q: %s", q.WidgetTitle, msg)
+	}
+	if q.WidgetIndex != "" {
+		return fmt.Sprintf("widget %s: %s", q.WidgetIndex, msg)
+	}
+	return msg
+}
+
+func wrapQueryError(q DashboardQuery, err error) error {
+	var e *fail.Error
+	if errors.As(err, &e) && (e.Category == "auth" || e.Category == "network") {
+		return err
+	}
+	return fail.NewValidation(queryWarning(q, "invalid query: "+err.Error()), "fix the query on the named widget")
 }
 
 func loadDashboardEnvelopeFromFile(path string) (map[string]any, error) {

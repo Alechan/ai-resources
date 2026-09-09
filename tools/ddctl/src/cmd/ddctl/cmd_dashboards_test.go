@@ -165,7 +165,7 @@ func TestRunDashboardsValidate_Text(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("code = %d stderr=%s", code, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "queries:") {
+	if !strings.Contains(stdout.String(), "dashboard structure: valid") {
 		t.Fatalf("stdout = %s", stdout.String())
 	}
 }
