@@ -233,6 +233,11 @@ func TestExecute_MonitorsNestedHelp(t *testing.T) {
 			shouldContain: []string{"ddctl monitors unmute", "--confirm"},
 		},
 		{
+			name: "delete help",
+			args: []string{"monitors", "delete", "--help"},
+			shouldContain: []string{"ddctl monitors delete", "--confirm"},
+		},
+		{
 			name: "help subcommand form",
 			args: []string{"help", "monitors", "mute"},
 			shouldContain: []string{"ddctl monitors mute"},
@@ -259,6 +264,20 @@ func TestExecute_MonitorsNestedHelp(t *testing.T) {
 				t.Fatalf("nested help printed global usage:\n%s", out)
 			}
 		})
+	}
+}
+
+func TestExecute_NotebooksValidateHelp(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Execute([]string{"notebooks", "validate", "--help"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("code = %d stderr=%s", code, stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{"--allow-empty-series", "warning", "exit 0"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("help missing %q:\n%s", want, out)
+		}
 	}
 }
 

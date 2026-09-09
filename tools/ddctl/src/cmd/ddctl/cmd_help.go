@@ -140,6 +140,12 @@ Mutates DataDog. PUT is full replacement; --replace-all is required.
 
 const helpNotebooksValidate = `Usage:
   ddctl notebooks validate --from-file <path> [--from <time>] [--to <time>] [--allow-empty-series]
+
+Validate notebook structure and preflight timeseries metric queries.
+Does not change Datadog.
+
+No-data in the selected window is a warning (exit 0), not invalidity.
+--allow-empty-series is accepted for compatibility; it does not change exit code.
 `
 
 func firstNonHelpArg(args []string) string {

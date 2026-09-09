@@ -15,7 +15,7 @@ import (
 
 func runMonitorsCmd(ctx context.Context, svcs app.Services, cfg app.Config, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		writeError(stderr, fail.NewValidation("missing monitors subcommand", "usage: ddctl monitors <list|get|validate|create|update|mute|unmute> [flags]"), cfg)
+		writeError(stderr, fail.NewValidation("missing monitors subcommand", "usage: ddctl monitors <list|get|validate|create|update|mute|unmute|delete> [flags]"), cfg)
 		return fail.CodeValidation
 	}
 	switch args[0] {
@@ -33,8 +33,10 @@ func runMonitorsCmd(ctx context.Context, svcs app.Services, cfg app.Config, args
 		return runMonitorsMuteCmd(ctx, svcs, cfg, args[1:], stdout, stderr)
 	case "unmute":
 		return runMonitorsUnmuteCmd(ctx, svcs, cfg, args[1:], stdout, stderr)
+	case "delete":
+		return runMonitorsDeleteCmd(ctx, svcs, cfg, args[1:], stdout, stderr)
 	default:
-		writeError(stderr, fail.NewValidation("unknown monitors subcommand", "valid: list, get, validate, create, update, mute, unmute"), cfg)
+		writeError(stderr, fail.NewValidation("unknown monitors subcommand", "valid: list, get, validate, create, update, mute, unmute, delete"), cfg)
 		return fail.CodeValidation
 	}
 }
@@ -270,6 +272,32 @@ func runMonitorsUnmuteCmd(ctx context.Context, svcs app.Services, cfg app.Config
 		return writeJSONResult(svcs, cfg, stdout, stderr, result)
 	}
 	printMonitorSummary(stdout, result)
+	return fail.CodeOK
+}
+
+func runMonitorsDeleteCmd(ctx context.Context, svcs app.Services, cfg app.Config, args []string, stdout, stderr io.Writer) int {
+	leadingID, parseArgs := splitLeadingPositional(args)
+	fs := flag.NewFlagSet("monitors delete", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	confirm := fs.String("confirm", "", "must equal monitor ID")
+	if err := fs.Parse(parseArgs); err != nil {
+		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl monitors delete <id> --confirm <id>"), cfg)
+		return fail.CodeValidation
+	}
+	id, err := parseMonitorIDArg(leadingID, fs)
+	if err != nil {
+		writeError(stderr, err, cfg)
+		return fail.ExitCode(err)
+	}
+	result, err := svcs.Monitors.Delete(ctx, service.MonitorDeleteInput{ID: id, Confirm: *confirm})
+	if err != nil {
+		writeError(stderr, err, cfg)
+		return fail.ExitCode(err)
+	}
+	if cfg.JSON {
+		return writeJSONResult(svcs, cfg, stdout, stderr, result)
+	}
+	fmt.Fprintf(stdout, "deleted monitor %d (%s)\n", id, result["name"])
 	return fail.CodeOK
 }
 

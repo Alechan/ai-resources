@@ -24,8 +24,10 @@ func printMonitorsHelp(w io.Writer, args []string) {
 		fmt.Fprint(w, helpMonitorsMute)
 	case "unmute":
 		fmt.Fprint(w, helpMonitorsUnmute)
+	case "delete":
+		fmt.Fprint(w, helpMonitorsDelete)
 	default:
-		fmt.Fprintf(w, "Unknown monitors subcommand %q.\nValid choices: list, get, validate, create, update, mute, unmute.\n\n", sub)
+		fmt.Fprintf(w, "Unknown monitors subcommand %q.\nValid choices: list, get, validate, create, update, mute, unmute, delete.\n\n", sub)
 		fmt.Fprint(w, helpMonitors)
 	}
 }
@@ -41,6 +43,7 @@ Subcommands:
   update    Replace a monitor (requires --replace-all)
   mute      Mute a monitor
   unmute    Unmute a monitor
+  delete    Delete a monitor (requires --confirm)
 
 Use ddctl monitors <subcommand> --help for flags, defaults, exit codes, and examples.
 
@@ -173,4 +176,26 @@ Exit codes:
   0  unmuted
   2  missing --confirm on production monitor
   5  API failure
+`
+
+const helpMonitorsDelete = `Usage:
+  ddctl monitors delete <id> --confirm <id>
+
+Delete a monitor via DELETE /api/v1/monitor/{id}.
+
+This mutates Datadog. Do not run unless delete was requested.
+
+Positional arguments:
+  id    Monitor ID to delete
+
+Flags:
+  --confirm <id>   Must exactly equal the monitor ID
+
+Exit codes:
+  0  deleted
+  2  missing or mismatched --confirm
+  5  API failure
+
+Example:
+  ddctl monitors delete 12345678 --confirm 12345678
 `

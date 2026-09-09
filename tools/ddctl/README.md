@@ -208,10 +208,11 @@ ddctl monitors validate --from-file monitor.json
 ddctl monitors create --from-file monitor.json --dry-run
 ddctl monitors update 12345678 --from-file monitor.json --replace-all
 
-# Mute / unmute
+# Mute / unmute / delete
 ddctl monitors mute 12345678
 ddctl monitors mute 12345678 --until "2026-09-10T12:00:00Z"
 ddctl monitors unmute 12345678 --confirm 12345678   # required for env:prod monitors
+ddctl monitors delete 12345678 --confirm 12345678     # throwaway monitors only
 ```
 
 Text list output: `[id] state type name tags:…`
@@ -268,7 +269,6 @@ ddctl notebooks create --from-file notebook-create.json --name "My notebook" --t
 ddctl notebooks update 14515133 --from-file notebook-update.json --replace-all
 
 # Validate notebook payload and preflight timeseries queries
-ddctl notebooks validate --from-file notebook.json --from now-30d
 ddctl notebooks validate --from-file notebook.json --from now-30d
 ```
 

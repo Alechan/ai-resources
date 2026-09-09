@@ -136,6 +136,7 @@ ddctl monitors create --from-file monitor.json --dry-run
 ddctl monitors update <id> --from-file monitor.json --replace-all
 ddctl monitors mute <id> [--until <rfc3339>]
 ddctl monitors unmute <id> [--confirm <id>]   # confirm required for env:prod
+ddctl monitors delete <id> --confirm <id>     # throwaway monitors only
 ```
 
 Output format (text list): `[id] state type name tags:…`

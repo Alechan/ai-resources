@@ -60,6 +60,11 @@ type MonitorMuteInput struct {
 	Confirm string
 }
 
+type MonitorDeleteInput struct {
+	ID      int64
+	Confirm string
+}
+
 type MonitorsService struct {
 	dd      *datadogapi.Client
 	metrics *MetricsQueryService
@@ -311,6 +316,33 @@ func (s *MonitorsService) Unmute(ctx context.Context, input MonitorMuteInput) (M
 		return nil, err
 	}
 	return s.Get(ctx, input.ID)
+}
+
+func (s *MonitorsService) Delete(ctx context.Context, input MonitorDeleteInput) (MonitorGetResult, error) {
+	if input.ID <= 0 {
+		return nil, fail.NewValidation("missing monitor ID", "usage: ddctl monitors delete <id> --confirm <id>")
+	}
+	want := strconv.FormatInt(input.ID, 10)
+	if strings.TrimSpace(input.Confirm) != want {
+		return nil, fail.NewValidation("--confirm must equal monitor ID", fmt.Sprintf("pass --confirm %s", want))
+	}
+	current, err := s.Get(ctx, input.ID)
+	if err != nil {
+		return nil, err
+	}
+	path := fmt.Sprintf("/api/v1/monitor/%d", input.ID)
+	var deleted map[string]any
+	if err := s.dd.Delete(ctx, path, &deleted); err != nil {
+		return nil, err
+	}
+	name, _ := current["name"].(string)
+	url, _ := current["url"].(string)
+	return MonitorGetResult{
+		"id":      input.ID,
+		"name":    name,
+		"url":     url,
+		"deleted": true,
+	}, nil
 }
 
 func (s *MonitorsService) mute(ctx context.Context, id int64, until string) error {
