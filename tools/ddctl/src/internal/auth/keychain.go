@@ -58,7 +58,7 @@ func (p *KeychainProvider) Cookies() ([]*http.Cookie, error) {
 		)
 	}
 	cookieStr := strings.TrimSpace(string(out))
-	return parseCookieString(cookieStr), nil
+	return ParseCookieString(cookieStr), nil
 }
 
 // Delete removes the Keychain entry.
@@ -71,25 +71,4 @@ func (p *KeychainProvider) Delete() error {
 		return fmt.Errorf("keychain delete: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 	return nil
-}
-
-// parseCookieString splits a raw Cookie header string into []*http.Cookie.
-func parseCookieString(cookieStr string) []*http.Cookie {
-	var cookies []*http.Cookie
-	for _, part := range strings.Split(cookieStr, "; ") {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
-		idx := strings.Index(part, "=")
-		if idx < 0 {
-			cookies = append(cookies, &http.Cookie{Name: part})
-			continue
-		}
-		cookies = append(cookies, &http.Cookie{
-			Name:  part[:idx],
-			Value: part[idx+1:],
-		})
-	}
-	return cookies
 }

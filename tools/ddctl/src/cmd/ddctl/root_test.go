@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/fail"
 )
 
 func TestExecuteHelp(t *testing.T) {
@@ -17,6 +19,9 @@ func TestExecuteHelp(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "notebooks") {
 		t.Fatalf("expected usage output to include notebooks command, got:\n%s", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "logs") {
+		t.Fatalf("expected usage output to include logs command, got:\n%s", stdout.String())
 	}
 	if !strings.Contains(stdout.String(), "dashboards") {
 		t.Fatalf("expected usage output to include dashboards command, got:\n%s", stdout.String())
@@ -275,10 +280,140 @@ func TestExecute_NotebooksValidateHelp(t *testing.T) {
 		t.Fatalf("code = %d stderr=%s", code, stderr.String())
 	}
 	out := stdout.String()
-	for _, want := range []string{"--allow-empty-series", "warning", "exit 0"} {
+	for _, want := range []string{"--from-file", "warning", "exit 0"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("help missing %q:\n%s", want, out)
 		}
+	}
+}
+
+func TestExecute_NotebooksNestedHelp(t *testing.T) {
+	tests := []struct {
+		name          string
+		args          []string
+		shouldContain []string
+	}{
+		{
+			name: "group help",
+			args: []string{"notebooks", "--help"},
+			shouldContain: []string{
+				"ddctl notebooks",
+				"get",
+				"create",
+				"update",
+				"validate",
+			},
+		},
+		{
+			name: "create help",
+			args: []string{"notebooks", "create", "--help"},
+			shouldContain: []string{
+				"ddctl notebooks create",
+				"--dry-run",
+				"--skip-validate",
+			},
+		},
+		{
+			name: "update help",
+			args: []string{"notebooks", "update", "--help"},
+			shouldContain: []string{
+				"ddctl notebooks update",
+				"--replace-all",
+				"--if-unmodified-since",
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			code := Execute(tc.args, &stdout, &stderr)
+			if code != 0 {
+				t.Fatalf("code = %d stderr=%s stdout=%s", code, stderr.String(), stdout.String())
+			}
+			out := stdout.String()
+			for _, want := range tc.shouldContain {
+				if !strings.Contains(out, want) {
+					t.Fatalf("help missing %q:\n%s", want, out)
+				}
+			}
+		})
+	}
+}
+
+func TestExecute_RemovedHyphenatedCommands(t *testing.T) {
+	tests := []struct {
+		oldCmd string
+		newUse string
+	}{
+		{"logs-query", "ddctl logs query"},
+		{"metrics-query", "ddctl metrics query"},
+		{"events-list", "ddctl events list"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.oldCmd, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			code := Execute([]string{tc.oldCmd}, &stdout, &stderr)
+			if code != fail.CodeValidation {
+				t.Fatalf("code = %d, want %d", code, fail.CodeValidation)
+			}
+			if !strings.Contains(stderr.String(), tc.newUse) {
+				t.Fatalf("stderr = %s", stderr.String())
+			}
+		})
+	}
+}
+
+func TestExecute_QueryGroupsHelp(t *testing.T) {
+	tests := []struct {
+		name          string
+		args          []string
+		shouldContain []string
+	}{
+		{
+			name: "logs group",
+			args: []string{"logs", "--help"},
+			shouldContain: []string{"ddctl logs", "query"},
+		},
+		{
+			name: "logs query help",
+			args: []string{"logs", "query", "--help"},
+			shouldContain: []string{"ddctl logs query", "--count-only", "--all"},
+		},
+		{
+			name: "metrics group",
+			args: []string{"metrics", "--help"},
+			shouldContain: []string{"ddctl metrics", "query"},
+		},
+		{
+			name: "metrics query help",
+			args: []string{"metrics", "query", "--help"},
+			shouldContain: []string{"ddctl metrics query", "--query"},
+		},
+		{
+			name: "events group",
+			args: []string{"events", "--help"},
+			shouldContain: []string{"ddctl events", "list"},
+		},
+		{
+			name: "events list help",
+			args: []string{"events", "list", "--help"},
+			shouldContain: []string{"ddctl events list", "--count-only"},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			code := Execute(tc.args, &stdout, &stderr)
+			if code != 0 {
+				t.Fatalf("code = %d stderr=%s", code, stderr.String())
+			}
+			out := stdout.String()
+			for _, want := range tc.shouldContain {
+				if !strings.Contains(out, want) {
+					t.Fatalf("help missing %q:\n%s", want, out)
+				}
+			}
+		})
 	}
 }
 

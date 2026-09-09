@@ -97,3 +97,15 @@ func ExitCode(err error) int {
 		return CodeAPI
 	}
 }
+
+// AsError returns err when it is already a *Error; otherwise wraps it as an api error.
+func AsError(err error) *Error {
+	if err == nil {
+		return nil
+	}
+	var e *Error
+	if errors.As(err, &e) {
+		return e
+	}
+	return &Error{Category: "api", Message: err.Error()}
+}

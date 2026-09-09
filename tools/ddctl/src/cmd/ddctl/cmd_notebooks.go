@@ -61,15 +61,7 @@ func runNotebooksGetCmd(ctx context.Context, svcs app.Services, cfg app.Config, 
 		writeError(stderr, err, cfg)
 		return fail.ExitCode(err)
 	}
-	if cfg.JSON {
-		if err := svcs.Output.JSON(stdout, result); err != nil {
-			writeError(stderr, fail.NewAPI(err.Error(), "unable to encode notebook result", ""), cfg)
-			return fail.CodeAPI
-		}
-		return fail.CodeOK
-	}
-	printNotebookSummary(stdout, cfg.Site, result)
-	return fail.CodeOK
+	return writeNotebookResult(svcs, cfg, stdout, stderr, result)
 }
 
 func runNotebooksCreateCmd(ctx context.Context, svcs app.Services, cfg app.Config, args []string, stdout, stderr io.Writer) int {
@@ -78,29 +70,34 @@ func runNotebooksCreateCmd(ctx context.Context, svcs app.Services, cfg app.Confi
 	fromFile := fs.String("from-file", "", "path to notebook JSON payload")
 	name := fs.String("name", "", "override notebook name")
 	timeSpan := fs.String("time", "", "override live_span (e.g. 1w)")
+	skipValidate := fs.Bool("skip-validate", false, "skip query preflight before create")
+	from := fs.String("from", "now-30d", "metrics validation start time")
+	to := fs.String("to", "now", "metrics validation end time")
+	dryRun := fs.Bool("dry-run", false, "validate and print summary without POST")
 	if err := fs.Parse(args); err != nil {
-		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl notebooks create --from-file <path> [--name <name>] [--time <live_span>]"), cfg)
+		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl notebooks create --from-file <path>"), cfg)
 		return fail.CodeValidation
 	}
 
 	result, err := svcs.Notebooks.Create(ctx, service.NotebookMutationInput{
-		FilePath: *fromFile,
-		Name:     *name,
-		Time:     *timeSpan,
+		FilePath:     *fromFile,
+		Name:         *name,
+		Time:         *timeSpan,
+		SkipValidate: *skipValidate,
+		From:         *from,
+		To:           *to,
+		DryRun:       *dryRun,
 	})
 	if err != nil {
 		writeError(stderr, err, cfg)
 		return fail.ExitCode(err)
 	}
-	if cfg.JSON {
-		if err := svcs.Output.JSON(stdout, result); err != nil {
-			writeError(stderr, fail.NewAPI(err.Error(), "unable to encode notebook result", ""), cfg)
-			return fail.CodeAPI
-		}
+	if dry, _ := result["dry_run"].(bool); dry && !cfg.JSON {
+		fmt.Fprintln(stdout, "dry-run: would create notebook")
+		printNotebookDryRun(stdout, result)
 		return fail.CodeOK
 	}
-	printNotebookSummary(stdout, cfg.Site, result)
-	return fail.CodeOK
+	return writeNotebookResult(svcs, cfg, stdout, stderr, result)
 }
 
 func runNotebooksUpdateCmd(ctx context.Context, svcs app.Services, cfg app.Config, args []string, stdout, stderr io.Writer) int {
@@ -110,6 +107,12 @@ func runNotebooksUpdateCmd(ctx context.Context, svcs app.Services, cfg app.Confi
 	fs.SetOutput(io.Discard)
 	fromFile := fs.String("from-file", "", "path to notebook JSON payload")
 	replaceAll := fs.Bool("replace-all", false, "confirm full replacement update")
+	skipValidate := fs.Bool("skip-validate", false, "skip query preflight before update")
+	from := fs.String("from", "now-30d", "metrics validation start time")
+	to := fs.String("to", "now", "metrics validation end time")
+	dryRun := fs.Bool("dry-run", false, "validate and print diff without PUT")
+	showDiff := fs.Bool("diff", false, "include semantic diff in successful update output")
+	ifUnmodified := fs.String("if-unmodified-since", "", "abort if remote modified_at does not match")
 	if err := fs.Parse(parseArgs); err != nil {
 		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl notebooks update <id> --from-file <path> --replace-all"), cfg)
 		return fail.CodeValidation
@@ -124,22 +127,25 @@ func runNotebooksUpdateCmd(ctx context.Context, svcs app.Services, cfg app.Confi
 	}
 
 	result, err := svcs.Notebooks.Update(ctx, service.NotebookMutationInput{
-		ID:       notebookID,
-		FilePath: *fromFile,
+		ID:                notebookID,
+		FilePath:          *fromFile,
+		SkipValidate:      *skipValidate,
+		From:              *from,
+		To:                *to,
+		DryRun:            *dryRun,
+		ShowDiff:          *showDiff,
+		IfUnmodifiedSince: *ifUnmodified,
 	}, *replaceAll)
 	if err != nil {
 		writeError(stderr, err, cfg)
 		return fail.ExitCode(err)
 	}
-	if cfg.JSON {
-		if err := svcs.Output.JSON(stdout, result); err != nil {
-			writeError(stderr, fail.NewAPI(err.Error(), "unable to encode notebook result", ""), cfg)
-			return fail.CodeAPI
-		}
+	if dry, _ := result["dry_run"].(bool); dry && !cfg.JSON {
+		fmt.Fprintf(stdout, "dry-run: would update notebook %s\n", notebookID)
+		printNotebookDryRun(stdout, result)
 		return fail.CodeOK
 	}
-	printNotebookSummary(stdout, cfg.Site, result)
-	return fail.CodeOK
+	return writeNotebookResult(svcs, cfg, stdout, stderr, result)
 }
 
 func runNotebooksValidateCmd(ctx context.Context, svcs app.Services, cfg app.Config, args []string, stdout, stderr io.Writer) int {
@@ -148,17 +154,15 @@ func runNotebooksValidateCmd(ctx context.Context, svcs app.Services, cfg app.Con
 	fromFile := fs.String("from-file", "", "path to notebook JSON payload")
 	from := fs.String("from", "now-30d", "metrics validation start time")
 	to := fs.String("to", "now", "metrics validation end time")
-	allowEmpty := fs.Bool("allow-empty-series", false, "no-data is always a warning; flag kept for compatibility")
 	if err := fs.Parse(args); err != nil {
-		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl notebooks validate --from-file <path> [--from <time>] [--to <time>] [--allow-empty-series]"), cfg)
+		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl notebooks validate --from-file <path> [--from <time>] [--to <time>]"), cfg)
 		return fail.CodeValidation
 	}
 
 	result, err := svcs.Notebooks.Validate(ctx, service.NotebookValidateInput{
-		FilePath:         *fromFile,
-		From:             *from,
-		To:               *to,
-		AllowEmptySeries: *allowEmpty,
+		FilePath: *fromFile,
+		From:     *from,
+		To:       *to,
 	})
 	if err != nil {
 		writeError(stderr, err, cfg)
@@ -185,6 +189,39 @@ func runNotebooksValidateCmd(ctx context.Context, svcs app.Services, cfg app.Con
 	return fail.CodeOK
 }
 
+func writeNotebookResult(svcs app.Services, cfg app.Config, stdout, stderr io.Writer, result map[string]any) int {
+	if cfg.JSON {
+		if err := svcs.Output.JSON(stdout, result); err != nil {
+			writeError(stderr, fail.NewAPI(err.Error(), "unable to encode notebook result", ""), cfg)
+			return fail.CodeAPI
+		}
+		return fail.CodeOK
+	}
+	printNotebookSummary(stdout, cfg.Site, result)
+	if diff, _ := result["diff"].(string); diff != "" {
+		fmt.Fprintf(stdout, "Diff: %s\n", diff)
+	}
+	return fail.CodeOK
+}
+
+func printNotebookDryRun(w io.Writer, result map[string]any) {
+	if name, _ := result["name"].(string); name != "" {
+		fmt.Fprintf(w, "Name:  %s\n", name)
+	}
+	if n, ok := result["cell_count"].(int); ok {
+		fmt.Fprintf(w, "Cells: %d\n", n)
+	}
+	if id, _ := result["id"].(string); id != "" {
+		fmt.Fprintf(w, "ID:    %s\n", id)
+	}
+	if url, _ := result["url"].(string); url != "" {
+		fmt.Fprintf(w, "URL:   %s\n", url)
+	}
+	if diff, _ := result["diff"].(string); diff != "" {
+		fmt.Fprintf(w, "Diff:  %s\n", diff)
+	}
+}
+
 func printNotebookSummary(w io.Writer, site string, payload map[string]any) {
 	data, _ := payload["data"].(map[string]any)
 	attrs, _ := data["attributes"].(map[string]any)
@@ -195,7 +232,9 @@ func printNotebookSummary(w io.Writer, site string, payload map[string]any) {
 	fmt.Fprintf(w, "ID: %s\n", id)
 	fmt.Fprintf(w, "Name: %s\n", name)
 	fmt.Fprintf(w, "Cells: %d\n", len(cells))
-	if id != "" {
+	if url, _ := payload["url"].(string); url != "" {
+		fmt.Fprintf(w, "URL: %s\n", url)
+	} else if id != "" {
 		if site == "" {
 			site = "datadoghq.com"
 		}

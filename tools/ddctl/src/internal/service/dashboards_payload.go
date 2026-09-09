@@ -648,21 +648,6 @@ func templateVarDefaults(raw any) map[string]string {
 	return out
 }
 
-func cloneMap(in map[string]any) map[string]any {
-	if in == nil {
-		return map[string]any{}
-	}
-	b, err := json.Marshal(in)
-	if err != nil {
-		return map[string]any{}
-	}
-	var out map[string]any
-	if err := json.Unmarshal(b, &out); err != nil {
-		return map[string]any{}
-	}
-	return out
-}
-
 func marshalStable(v any) []byte {
 	b, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {

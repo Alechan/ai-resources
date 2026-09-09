@@ -37,7 +37,7 @@ func NewServices(cfg Config) Services {
 		Monitors:     service.NewMonitorsService(ddClient, metricsSvc, cfg.Site),
 		EventsList:   service.NewEventsListService(ddClient),
 		MetricsQuery: metricsSvc,
-		Notebooks:    service.NewNotebooksService(ddClient, metricsSvc),
+		Notebooks:    service.NewNotebooksService(ddClient, metricsSvc, cfg.Site),
 		Dashboards:   service.NewDashboardsService(ddClient, metricsSvc, logsSvc, cfg.Site),
 		Output:       output.NewWriter(),
 		dd:           ddClient,

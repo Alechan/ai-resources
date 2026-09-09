@@ -12,7 +12,7 @@ import (
 )
 
 func runMetricsQueryCmd(ctx context.Context, svcs app.Services, cfg app.Config, args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("metrics-query", flag.ContinueOnError)
+	fs := flag.NewFlagSet("metrics query", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 
 	query := fs.String("query", "", "DataDog metrics query (e.g. avg:system.cpu.user{service:my-svc})")
@@ -22,7 +22,7 @@ func runMetricsQueryCmd(ctx context.Context, svcs app.Services, cfg app.Config, 
 	raw := fs.Bool("raw", false, "include full pointlist in JSON output (default: summary stats only)")
 
 	if err := fs.Parse(args); err != nil {
-		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl metrics-query --query <query> [flags]"), cfg)
+		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl metrics query --query <query> [flags]"), cfg)
 		return fail.CodeValidation
 	}
 
@@ -32,7 +32,7 @@ func runMetricsQueryCmd(ctx context.Context, svcs app.Services, cfg app.Config, 
 	}
 
 	if *query == "" {
-		writeError(stderr, fail.NewValidation("--query is required", `example: ddctl metrics-query --query "avg:system.cpu.user{service:tapir}"`), cfg)
+		writeError(stderr, fail.NewValidation("--query is required", `example: ddctl metrics query --query "avg:system.cpu.user{service:tapir}"`), cfg)
 		return fail.CodeValidation
 	}
 

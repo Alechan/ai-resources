@@ -13,7 +13,7 @@ import (
 	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/fail"
 )
 
-// Client is an HTTP client for the DataDog API, authenticated via Chrome cookies.
+// Client is an HTTP client for the DataDog API, authenticated via Keychain session cookies.
 type Client struct {
 	httpClient *http.Client
 	site       string
@@ -123,7 +123,10 @@ func (c *Client) Probe(ctx context.Context, path string) bool {
 func (c *Client) addAuth(req *http.Request) error {
 	cookies, err := c.cookies.Cookies()
 	if err != nil {
-		return fail.NewAuth("failed to load Chrome cookies: "+err.Error(), "ensure Chrome has been used to visit app.datadoghq.com and that keychain access is granted")
+		return fail.NewAuth(
+			"failed to load Keychain session credentials: "+err.Error(),
+			fmt.Sprintf("run ddctl init and ensure Keychain access for app.%s", c.site),
+		)
 	}
 	for _, cookie := range cookies {
 		req.AddCookie(cookie)
@@ -151,19 +154,19 @@ func (c *Client) do(req *http.Request, out any, started time.Time) error {
 	if resp.StatusCode == 401 || resp.StatusCode == 403 {
 		return fail.NewAuth(
 			fmt.Sprintf("HTTP %d: authentication required", resp.StatusCode),
-			"verify Chrome DataDog cookies are fresh; try visiting app.datadoghq.com",
+			fmt.Sprintf("refresh Keychain session credentials with ddctl init (app.%s)", c.site),
 		)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fail.NewAPI(
 			fmt.Sprintf("HTTP %d", resp.StatusCode),
 			"inspect API response",
-			redactDetails(string(bodyBytes)),
+			redactDetails(string(bodyBytes), c.debug != nil),
 		)
 	}
 	if out != nil && len(bodyBytes) > 0 {
 		if err := json.Unmarshal(bodyBytes, out); err != nil {
-			return fail.NewAPI("failed to decode response", "", redactDetails(string(bodyBytes)))
+			return fail.NewAPI("failed to decode response", "", redactDetails(string(bodyBytes), c.debug != nil))
 		}
 	}
 	return nil

@@ -12,7 +12,7 @@ import (
 )
 
 func runLogsQueryCmd(ctx context.Context, svcs app.Services, cfg app.Config, args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("logs-query", flag.ContinueOnError)
+	fs := flag.NewFlagSet("logs query", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 
 	query := fs.String("query", "*", "search query string")
@@ -25,7 +25,7 @@ func runLogsQueryCmd(ctx context.Context, svcs app.Services, cfg app.Config, arg
 	cursor := fs.String("cursor", "", "pagination cursor from a previous result's next_cursor field")
 
 	if err := fs.Parse(args); err != nil {
-		err = fail.NewValidation(err.Error(), "usage: ddctl logs-query [flags]")
+		err = fail.NewValidation(err.Error(), "usage: ddctl logs query [flags]")
 		writeError(stderr, err, cfg)
 		return fail.ExitCode(err)
 	}
@@ -83,7 +83,7 @@ func runLogsQueryCmd(ctx context.Context, svcs app.Services, cfg app.Config, arg
 	}
 	if result.NextCursor != "" {
 		fmt.Fprintf(stdout, "# next_cursor: %s\n", result.NextCursor)
-		fmt.Fprintf(stdout, "# use: ddctl logs-query --cursor '%s' to fetch the next page\n", result.NextCursor)
+		fmt.Fprintf(stdout, "# use: ddctl logs query --cursor '%s' to fetch the next page\n", result.NextCursor)
 	}
 	return fail.CodeOK
 }

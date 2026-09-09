@@ -14,7 +14,7 @@ import (
 )
 
 func runEventsListCmd(ctx context.Context, svcs app.Services, cfg app.Config, args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("events-list", flag.ContinueOnError)
+	fs := flag.NewFlagSet("events list", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 
 	from := fs.String("from", "now-1h", "start time (relative or ISO-8601)")
@@ -26,7 +26,7 @@ func runEventsListCmd(ctx context.Context, svcs app.Services, cfg app.Config, ar
 	countOnly := fs.Bool("count-only", false, "return only the hit count, no event data")
 
 	if err := fs.Parse(args); err != nil {
-		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl events-list [flags]"), cfg)
+		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl events list [flags]"), cfg)
 		return fail.CodeValidation
 	}
 

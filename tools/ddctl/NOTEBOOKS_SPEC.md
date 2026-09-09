@@ -28,6 +28,9 @@ Create notebook via:
 
 `POST /api/v1/notebooks`
 
+Preflight: metric queries are validated before POST unless `--skip-validate`.
+Use `--dry-run` to validate without creating.
+
 Accepted input file shapes:
 1. `{"data":{"type":"notebooks","attributes":{...}}}` (API-like envelope)
 2. `{"attributes":{...}}`
@@ -45,6 +48,9 @@ Update notebook via:
 
 Safety:
 - Requires `--replace-all` explicitly.
+- Preflight: metric queries are validated before PUT unless `--skip-validate`.
+- `--dry-run --replace-all` prints diff without PUT.
+- `--if-unmodified-since` aborts when remote `modified_at` differs.
 - Reject payloads missing required full-replacement fields:
   - `attributes.name`
   - `attributes.time`
@@ -54,7 +60,7 @@ Normalization:
 - Force `data.type = "notebooks"`.
 - Force `data.id = <id>`.
 
-### 4) `ddctl notebooks validate --from-file <path> [--from <time>] [--to <time>] [--allow-empty-series]`
+### 4) `ddctl notebooks validate --from-file <path> [--from <time>] [--to <time>]`
 
 Local schema checks:
 - Supported cell wrapper shape (`type: notebook_cells`, `attributes.definition`).
@@ -66,8 +72,7 @@ Online query preflight (best effort):
 - Extract metric queries from timeseries cells.
 - Execute each with DataDog metrics API.
 - Empty metric series in the selected window is a **warning**
-  (exit 0), not invalidity. `--allow-empty-series` is accepted
-  for compatibility.
+  (exit 0), not invalidity.
 
 ## Known caveats captured by the CLI docs
 

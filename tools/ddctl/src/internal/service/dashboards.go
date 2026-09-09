@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/datadogapi"
 	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/fail"
@@ -24,7 +23,6 @@ type DashboardMutationInput struct {
 	Title              string
 	ID                 string
 	SkipValidate       bool
-	AllowEmptySeries   bool
 	From               string
 	To                 string
 	DryRun             bool
@@ -39,7 +37,6 @@ type DashboardValidateInput struct {
 	FilePath          string
 	From              string
 	To                string
-	AllowEmptySeries  bool
 	TemplateVariables map[string]string
 }
 
@@ -56,7 +53,6 @@ type DashboardValidateResult struct {
 	Monitors         []string         `json:"monitors,omitempty"`
 	Skipped          []DashboardQuery `json:"skipped"`
 	Warnings         []string         `json:"warnings"`
-	AllowEmptySeries bool             `json:"allow_empty_series"`
 }
 
 type DashboardsService struct {
@@ -94,7 +90,7 @@ func (s *DashboardsService) Create(ctx context.Context, input DashboardMutationI
 		return nil, err
 	}
 	if !input.SkipValidate {
-		if _, err := s.validatePrepared(ctx, payload, input.From, input.To, input.AllowEmptySeries, input.TemplateVariables); err != nil {
+		if _, err := s.validatePrepared(ctx, payload, input.From, input.To, input.TemplateVariables); err != nil {
 			return nil, err
 		}
 	}
@@ -127,41 +123,44 @@ func (s *DashboardsService) Update(ctx context.Context, input DashboardMutationI
 		return nil, err
 	}
 	if !input.SkipValidate {
-		if _, err := s.validatePrepared(ctx, payload, input.From, input.To, input.AllowEmptySeries, input.TemplateVariables); err != nil {
+		if _, err := s.validatePrepared(ctx, payload, input.From, input.To, input.TemplateVariables); err != nil {
 			return nil, err
 		}
 	}
 
-	needGet := strings.TrimSpace(input.IfUnmodifiedSince) != "" || input.DryRun || input.ShowDiff
+	snapshot := MutationSnapshotInput{
+		IfUnmodifiedSince: input.IfUnmodifiedSince,
+		DryRun:            input.DryRun,
+		ShowDiff:          input.ShowDiff,
+	}
 	var semantic string
-	if needGet {
+	if mutationNeedsRemoteSnapshot(snapshot) {
 		current, err := s.Get(ctx, DashboardGetInput{ID: input.ID})
 		if err != nil {
 			return nil, err
 		}
-		if strings.TrimSpace(input.IfUnmodifiedSince) != "" {
-			got := fmt.Sprint(current["modified_at"])
-			if !modifiedAtMatches(got, input.IfUnmodifiedSince) {
-				return nil, fail.NewValidation(
-					"dashboard modified_at does not match --if-unmodified-since",
-					fmt.Sprintf("remote modified_at is %s", got),
-				)
+		if err := assertModifiedAtMatches(fmt.Sprint(current["modified_at"]), input.IfUnmodifiedSince, "dashboard"); err != nil {
+			return nil, err
+		}
+		stripIdentity := func(m map[string]any) {
+			for _, k := range dashboardIdentityFields {
+				delete(m, k)
 			}
 		}
-		left := cloneMap(map[string]any(current))
-		right := cloneMap(payload)
-		for _, k := range dashboardIdentityFields {
-			delete(left, k)
-			delete(right, k)
-		}
-		semantic = SemanticDiffDashboardPayloads(left, right)
+		semantic, jsonDiff := computeMutationDiff(MutationDiffInput{
+			Current:      map[string]any(current),
+			Next:         payload,
+			StripCurrent: stripIdentity,
+			StripNext:    stripIdentity,
+			Semantic:     SemanticDiffDashboardPayloads,
+		})
 		if input.DryRun {
 			return DashboardMutationResult{
 				"dry_run":   true,
 				"id":        input.ID,
 				"url":       dashboardCanonicalURL(s.site, input.ID),
 				"diff":      semantic,
-				"json_diff": DiffDashboardPayloads(left, right),
+				"json_diff": jsonDiff,
 			}, nil
 		}
 	}
@@ -194,10 +193,10 @@ func (s *DashboardsService) Validate(ctx context.Context, input DashboardValidat
 	if err := assertDashboardRequired(env); err != nil {
 		return DashboardValidateResult{}, err
 	}
-	return s.validatePrepared(ctx, env, input.From, input.To, input.AllowEmptySeries, input.TemplateVariables)
+	return s.validatePrepared(ctx, env, input.From, input.To, input.TemplateVariables)
 }
 
-func (s *DashboardsService) validatePrepared(ctx context.Context, env map[string]any, from, to string, allowEmpty bool, vars map[string]string) (DashboardValidateResult, error) {
+func (s *DashboardsService) validatePrepared(ctx context.Context, env map[string]any, from, to string, vars map[string]string) (DashboardValidateResult, error) {
 	if from == "" {
 		from = "now-30d"
 	}
@@ -209,9 +208,8 @@ func (s *DashboardsService) validatePrepared(ctx context.Context, env map[string
 		return DashboardValidateResult{}, err
 	}
 	result := DashboardValidateResult{
-		Structure:        "valid",
-		Skipped:          extracted.Skipped,
-		AllowEmptySeries: allowEmpty,
+		Structure: "valid",
+		Skipped:   extracted.Skipped,
 	}
 	for _, q := range extracted.Metrics {
 		result.Metrics = append(result.Metrics, q.Query)
@@ -273,7 +271,6 @@ func (s *DashboardsService) validatePrepared(ctx context.Context, env map[string
 		}
 		result.MonitorsValid++
 	}
-	_ = allowEmpty
 	return result, nil
 }
 
@@ -510,34 +507,3 @@ func dashboardIDFrom(payload map[string]any) string {
 	return ""
 }
 
-func modifiedAtMatches(got, expected string) bool {
-	got = strings.TrimSpace(got)
-	expected = strings.TrimSpace(expected)
-	if got == expected {
-		return true
-	}
-	gt, gerr := parseFlexibleTime(got)
-	et, eerr := parseFlexibleTime(expected)
-	if gerr != nil || eerr != nil {
-		return false
-	}
-	return gt.Equal(et)
-}
-
-func parseFlexibleTime(s string) (time.Time, error) {
-	formats := []string{
-		time.RFC3339Nano,
-		time.RFC3339,
-		"2006-01-02T15:04:05.000000+00:00",
-		"2006-01-02T15:04:05Z",
-	}
-	var last error
-	for _, f := range formats {
-		ts, err := time.Parse(f, s)
-		if err == nil {
-			return ts, nil
-		}
-		last = err
-	}
-	return time.Time{}, last
-}

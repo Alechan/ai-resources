@@ -7,6 +7,7 @@ import (
 	"io"
 
 	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/app"
+	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/auth"
 	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/fail"
 	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/service"
 )
@@ -16,6 +17,11 @@ func runDoctorCmd(ctx context.Context, svcs app.Services, cfg app.Config, args [
 	fs.SetOutput(io.Discard)
 	if err := fs.Parse(args); err != nil {
 		err = fail.NewValidation(err.Error(), "usage: ddctl doctor")
+		writeError(stderr, err, cfg)
+		return fail.ExitCode(err)
+	}
+
+	if err := auth.RequireDarwin(); err != nil {
 		writeError(stderr, err, cfg)
 		return fail.ExitCode(err)
 	}
@@ -31,7 +37,7 @@ func runDoctorCmd(ctx context.Context, svcs app.Services, cfg app.Config, args [
 			writeError(stderr, fail.NewAPI(err.Error(), "unable to encode doctor report", ""), cfg)
 			return fail.CodeAPI
 		}
-		return fail.CodeOK
+		return doctorExitCode(report)
 	}
 
 	fmt.Fprintf(stdout, "credential store: %s\n", report.CredentialStore)

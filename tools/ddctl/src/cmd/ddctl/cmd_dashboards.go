@@ -97,7 +97,6 @@ func runDashboardsCreateCmd(ctx context.Context, svcs app.Services, cfg app.Conf
 	fromFile := fs.String("from-file", "", "path to dashboard JSON payload")
 	title := fs.String("title", "", "override dashboard title")
 	skipValidate := fs.Bool("skip-validate", false, "skip query preflight before create")
-	allowEmpty := fs.Bool("allow-empty-series", false, "no-data is always a warning; flag kept for compatibility")
 	from := fs.String("from", "now-30d", "query preflight start time")
 	to := fs.String("to", "now", "query preflight end time")
 	dryRun := fs.Bool("dry-run", false, "validate and print summary; do not POST")
@@ -117,7 +116,6 @@ func runDashboardsCreateCmd(ctx context.Context, svcs app.Services, cfg app.Conf
 		FilePath:          *fromFile,
 		Title:             *title,
 		SkipValidate:      *skipValidate,
-		AllowEmptySeries:  *allowEmpty,
 		From:              *from,
 		To:                *to,
 		DryRun:            *dryRun,
@@ -145,7 +143,6 @@ func runDashboardsUpdateCmd(ctx context.Context, svcs app.Services, cfg app.Conf
 	showDiff := fs.Bool("diff", false, "show semantic diff against the current dashboard")
 	ifUnmodified := fs.String("if-unmodified-since", "", "abort if remote modified_at does not match")
 	skipValidate := fs.Bool("skip-validate", false, "skip query preflight before update")
-	allowEmpty := fs.Bool("allow-empty-series", false, "no-data is always a warning; flag kept for compatibility")
 	from := fs.String("from", "now-30d", "query preflight start time")
 	to := fs.String("to", "now", "query preflight end time")
 	var tvs repeatableStrings
@@ -172,7 +169,6 @@ func runDashboardsUpdateCmd(ctx context.Context, svcs app.Services, cfg app.Conf
 		FilePath:           *fromFile,
 		ID:                 dashboardID,
 		SkipValidate:       *skipValidate,
-		AllowEmptySeries:   *allowEmpty,
 		From:               *from,
 		To:                 *to,
 		DryRun:            *dryRun,
@@ -208,7 +204,6 @@ func runDashboardsValidateCmd(ctx context.Context, svcs app.Services, cfg app.Co
 	fromFile := fs.String("from-file", "", "path to dashboard JSON payload")
 	from := fs.String("from", "now-30d", "query preflight start time")
 	to := fs.String("to", "now", "query preflight end time")
-	allowEmpty := fs.Bool("allow-empty-series", false, "no-data is always a warning; flag kept for compatibility")
 	var tvs repeatableStrings
 	fs.Var(&tvs, "template-variable", "substitute $name.value in queries (name=value, repeatable)")
 	if err := fs.Parse(args); err != nil {
@@ -225,7 +220,6 @@ func runDashboardsValidateCmd(ctx context.Context, svcs app.Services, cfg app.Co
 		FilePath:          *fromFile,
 		From:              *from,
 		To:                *to,
-		AllowEmptySeries:  *allowEmpty,
 		TemplateVariables: vars,
 	})
 	if err != nil {
@@ -302,7 +296,6 @@ func runDashboardsCloneCmd(ctx context.Context, svcs app.Services, cfg app.Confi
 	fs.SetOutput(io.Discard)
 	title := fs.String("title", "", "title for the cloned dashboard (required)")
 	skipValidate := fs.Bool("skip-validate", false, "skip query preflight before create")
-	allowEmpty := fs.Bool("allow-empty-series", false, "no-data is always a warning; flag kept for compatibility")
 	from := fs.String("from", "now-30d", "query preflight start time")
 	to := fs.String("to", "now", "query preflight end time")
 	dryRun := fs.Bool("dry-run", false, "validate and print summary; do not POST")
@@ -331,7 +324,6 @@ func runDashboardsCloneCmd(ctx context.Context, svcs app.Services, cfg app.Confi
 	}
 	result, err := svcs.Dashboards.Clone(ctx, sourceID, *title, service.DashboardMutationInput{
 		SkipValidate:      *skipValidate,
-		AllowEmptySeries:  *allowEmpty,
 		From:              *from,
 		To:                *to,
 		DryRun:            *dryRun,

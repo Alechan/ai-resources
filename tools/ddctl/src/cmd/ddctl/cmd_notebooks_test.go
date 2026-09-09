@@ -49,7 +49,7 @@ func TestRunNotebooksUpdate_RequiresReplaceAll(t *testing.T) {
 	}
 
 	svcs := app.Services{
-		Notebooks: service.NewNotebooksService(nil, nil),
+		Notebooks: service.NewNotebooksService(nil, nil, "datadoghq.com"),
 	}
 	cfg := app.NewConfig("datadoghq.com", 10*time.Second, false, false)
 

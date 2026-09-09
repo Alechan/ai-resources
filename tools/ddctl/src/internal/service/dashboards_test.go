@@ -341,7 +341,7 @@ func TestDashboardsValidate_MetricEmptySeriesWarns(t *testing.T) {
 	}
 }
 
-func TestDashboardsValidate_AllowEmptySeriesWarns(t *testing.T) {
+func TestDashboardsValidate_NoDataWarns(t *testing.T) {
 	t.Parallel()
 	dd := testDashClient(dashRoundTripper(func(req *http.Request) (*http.Response, error) {
 		return jsonResponse(http.StatusOK, `{"status":"ok","series":[]}`), nil
@@ -349,10 +349,9 @@ func TestDashboardsValidate_AllowEmptySeriesWarns(t *testing.T) {
 	svc := NewDashboardsService(dd, NewMetricsQueryService(dd), NewLogsQueryService(dd), "datadoghq.com")
 	file := writeDashboardFile(t, metricDashboardJSON)
 	got, err := svc.Validate(context.Background(), DashboardValidateInput{
-		FilePath:         file,
-		From:             "now-1h",
-		To:               "now",
-		AllowEmptySeries: true,
+		FilePath: file,
+		From:     "now-1h",
+		To:       "now",
 	})
 	if err != nil {
 		t.Fatalf("Validate() error = %v", err)

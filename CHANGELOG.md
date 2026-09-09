@@ -42,6 +42,18 @@
 
 ### Changed
 
+- **Breaking:** removed `logs-query`, `metrics-query`, and `events-list`; use
+  `ddctl logs query`, `ddctl metrics query`, and `ddctl events list`
+- Shared mutation helpers for dashboard/monitor/notebook update dry-run and
+  `--if-unmodified-since` checks (`internal/service/mutation.go`, `jsonutil.go`)
+- **Breaking:** removed `--allow-empty-series` from dashboards and notebooks
+  validate/create/update (no-data remains a warning, exit 0)
+- `ddctl notebooks create`/`update`: validate-before-write, `--dry-run`,
+  `--skip-validate`, `--if-unmodified-since`, and `--diff` (parity with dashboards)
+- `--json` errors always use structured envelopes; `doctor --json` uses the
+  same exit codes as text mode; API `details` redacted unless `--debug`
+- Keychain-centric auth messaging; macOS guard on `init`/`doctor`; unified
+  cookie parsing in `internal/auth`
 - **Breaking:** removed `ddctl monitors-list` and `ddctl monitors-get`; use
   `ddctl monitors list` and `ddctl monitors get`
 - **Breaking:** removed dashboard `--expected-modified-at`; use
@@ -50,7 +62,7 @@
   (including logs `search.query`), treats no-data as a warning (exit 0), and
   prints widget-attributed query results
 - `ddctl notebooks validate`: empty metric series is a warning (exit 0), aligned
-  with dashboards; `--allow-empty-series` is accepted for compatibility only
+  with dashboards
 - Hardened `claude-statusline` with a pinned `ccusage` fallback, cached monthly totals, and graceful segment fallback behavior.
 - Tightened `claude-statusline` to version-gate PATH `ccusage` binaries and clarified manual install documentation.
 - Fixed `claude-statusline` daily cost reporting to use an explicit calendar-day `ccusage daily` query instead of parsing `statusline` output.
@@ -63,5 +75,7 @@
 
 ### Removed
 
+- `logs-query`, `metrics-query`, and `events-list` (replaced by nested
+  `ddctl logs query`, `ddctl metrics query`, and `ddctl events list`)
 - `ddctl monitors-list` and `ddctl monitors-get` (replaced by nested
   `ddctl monitors list` and `ddctl monitors get`)

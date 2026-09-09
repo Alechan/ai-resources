@@ -1,6 +1,9 @@
 package fail
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func TestEnvelopeIncludesDetails(t *testing.T) {
 	// Given
@@ -16,5 +19,18 @@ func TestEnvelopeIncludesDetails(t *testing.T) {
 	// Then
 	if errObj["details"] != "HTTP 503" {
 		t.Fatalf("details = %v, want HTTP 503", errObj["details"])
+	}
+}
+
+func TestAsErrorWrapsUnknownErrors(t *testing.T) {
+	// Given
+	raw := fmt.Errorf("plain failure")
+
+	// When
+	got := AsError(raw)
+
+	// Then
+	if got.Category != "api" || got.Message != "plain failure" {
+		t.Fatalf("AsError() = %+v", got)
 	}
 }

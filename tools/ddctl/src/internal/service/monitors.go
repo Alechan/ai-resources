@@ -230,27 +230,31 @@ func (s *MonitorsService) Update(ctx context.Context, input MonitorMutationInput
 		}
 	}
 	var semantic string
-	if strings.TrimSpace(input.IfUnmodifiedSince) != "" || input.DryRun || input.ShowDiff {
+	if mutationNeedsRemoteSnapshot(MutationSnapshotInput{
+		IfUnmodifiedSince: input.IfUnmodifiedSince,
+		DryRun:            input.DryRun,
+		ShowDiff:          input.ShowDiff,
+	}) {
 		current, err := s.Get(ctx, input.ID)
 		if err != nil {
 			return nil, err
 		}
-		if strings.TrimSpace(input.IfUnmodifiedSince) != "" {
-			got := monitorModifiedAt(current)
-			if !modifiedAtMatches(got, input.IfUnmodifiedSince) {
-				return nil, fail.NewValidation(
-					"monitor modified timestamp does not match --if-unmodified-since",
-					fmt.Sprintf("remote modified is %s", got),
-				)
+		if err := assertModifiedAtMatches(monitorModifiedAt(current), input.IfUnmodifiedSince, "monitor"); err != nil {
+			return nil, err
+		}
+		stripIdentity := func(m map[string]any) {
+			for _, k := range monitorIdentityFields {
+				delete(m, k)
 			}
 		}
-		left := cloneMap(map[string]any(current))
-		right := cloneMap(payload)
-		for _, k := range monitorIdentityFields {
-			delete(left, k)
-			delete(right, k)
-		}
-		semantic = DiffMonitorPayloads(left, right)
+		semantic, _ = computeMutationDiff(MutationDiffInput{
+			Current:      map[string]any(current),
+			Next:         payload,
+			StripCurrent: stripIdentity,
+			StripNext:    stripIdentity,
+			Semantic:     func(left, right map[string]any) string { return DiffMonitorPayloads(left, right) },
+			JSONDiff:     func(left, right map[string]any) string { return DiffMonitorPayloads(left, right) },
+		})
 		if input.DryRun {
 			return MonitorGetResult{
 				"dry_run": true,

@@ -3,8 +3,16 @@ package datadogapi
 import (
 	"fmt"
 	"io"
+	"regexp"
 	"strings"
 	"time"
+)
+
+const redactedBodyPlaceholder = "[response body redacted]"
+
+var (
+	emailLikeRe = regexp.MustCompile(`[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}`)
+	tokenKeyRe  = regexp.MustCompile(`"(?:_authentication_token|dd_csrf_token|authorization|api_key|application_key)"\s*:\s*"[^"]*"`)
 )
 
 // DebugLogger receives redacted request diagnostics when --debug is set.
@@ -27,15 +35,20 @@ func (l stderrDebugLogger) Printf(format string, args ...any) {
 	fmt.Fprintf(l.w, "debug: "+format+"\n", args...)
 }
 
-func redactDetails(body string) string {
+func redactDetails(body string, debug bool) string {
 	body = strings.TrimSpace(body)
 	if body == "" {
 		return ""
+	}
+	if !debug {
+		return redactedBodyPlaceholder
 	}
 	lower := strings.ToLower(body)
 	if strings.Contains(lower, `"events"`) || strings.Contains(lower, `"hitcount"`) {
 		return "[response body redacted: may contain log events]"
 	}
+	body = tokenKeyRe.ReplaceAllString(body, `"$1":"[redacted]"`)
+	body = emailLikeRe.ReplaceAllString(body, "[redacted-email]")
 	if len(body) > 512 {
 		return body[:512] + "…"
 	}

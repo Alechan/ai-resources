@@ -89,19 +89,19 @@ If `datadog reachable: false` or you get HTTP 401, the cookies are expired — g
 ### Step 4 — Query logs
 
 ```
-ddctl logs-query --query "service:<name> status:error" --from now-1h
-ddctl logs-query --query "*" --from now-4h --limit 50 --json
+ddctl logs query --query "service:<name> status:error" --from now-1h
+ddctl logs query --query "*" --from now-4h --limit 50 --json
 
 # Count first for large windows
-ddctl logs-query --query "service:<name>" --from now-24h --count-only --json
+ddctl logs query --query "service:<name>" --from now-24h --count-only --json
 
 # Single-page result shows cursor hint if more pages exist:
 # next_cursor: Aw...
 # Use it:
-ddctl logs-query --cursor '<next_cursor value>'
+ddctl logs query --cursor '<next_cursor value>'
 
 # Auto-paginate (collects up to --limit total events across pages):
-ddctl logs-query --all --limit 200
+ddctl logs query --all --limit 200
 ```
 
 Supported `--from`/`--to` formats: `now`, `now-1h`, `now-30m`, `now-2d`, `now-1w`, Unix milliseconds, RFC3339.
@@ -117,7 +117,7 @@ Supported `--from`/`--to` formats: `now`, `now-1h`, `now-30m`, `now-2d`, `now-1w
 ### Step 4.2 — Logged fields vs queryable fields
 
 - Application code may log structured fields (e.g. `log.WithField("panic_stacktrace", ...)`).
-- DataDog can store them, but `ddctl logs-query` may not expose them as queryable/returned fields.
+- DataDog can store them, but `ddctl logs query` may not expose them as queryable/returned fields.
 - Practical rule:
   1. query with standard fields first,
   2. then use Dashboard/raw logs for deep structured payload inspection.
@@ -142,23 +142,23 @@ Output format (text list): `[id] state type name tags:…`
 ### Step 6 — List events
 
 ```
-ddctl events-list --from now-2h
-ddctl events-list --from now-4h --tags env:prod
-ddctl events-list --from now-1h --sources containerd,kubernetes --limit 20
-ddctl events-list --from now-1h --count-only --json
-ddctl events-list --cursor '<next_cursor value>'
+ddctl events list --from now-2h
+ddctl events list --from now-4h --tags env:prod
+ddctl events list --from now-1h --sources containerd,kubernetes --limit 20
+ddctl events list --from now-1h --count-only --json
+ddctl events list --cursor '<next_cursor value>'
 ```
 
-Uses the same browser endpoint as logs-query (`/api/v1/logs-analytics/list?type=feed`),
+Uses the same browser endpoint as `ddctl logs query` (`/api/v1/logs-analytics/list?type=feed`),
 so it works with session-cookie auth. Supports `--limit`, `--cursor`, and `--count-only`.
 
 ### Step 7 — Query metrics
 
 ```
-ddctl metrics-query --query "avg:system.cpu.user{service:<name>}" --from now-1h
-ddctl metrics-query --query "sum:aws.sqs.number_of_messages_received{service:<name>} by {queuename}.as_rate()" --from now-1h
-ddctl metrics-query --query "<query>" --from now-4h --json
-ddctl metrics-query --query "<query>" --from now-4h --json --raw   # includes full pointlist
+ddctl metrics query --query "avg:system.cpu.user{service:<name>}" --from now-1h
+ddctl metrics query --query "sum:aws.sqs.number_of_messages_received{service:<name>} by {queuename}.as_rate()" --from now-1h
+ddctl metrics query --query "<query>" --from now-4h --json
+ddctl metrics query --query "<query>" --from now-4h --json --raw   # includes full pointlist
 ```
 
 The query syntax is standard DataDog metrics query syntax:
@@ -184,16 +184,20 @@ ddctl --json notebooks get <id> > notebook.json
 # Validate notebook payload (timeseries preflight)
 ddctl notebooks validate --from-file notebook.json --from now-30d
 
-# Create notebook
+# Create notebook (preflight runs by default; use --dry-run first)
+ddctl notebooks create --from-file notebook-create.json --name "Incident notebook" --time 1w --dry-run
 ddctl notebooks create --from-file notebook-create.json --name "Incident notebook" --time 1w
 
-# Update notebook (full replacement)
-ddctl notebooks update <id> --from-file notebook-update.json --replace-all
+# Update notebook (full replacement; preflight + optional safety flags)
+ddctl notebooks update <id> --from-file notebook-update.json --replace-all --dry-run
+ddctl notebooks update <id> --from-file notebook-update.json --replace-all --if-unmodified-since <rfc3339>
 ```
 
 Notebook update caveats:
 - `PUT` is full replacement, not patch.
 - `--replace-all` is required.
+- Create/update run metric preflight unless `--skip-validate`.
+- `--dry-run` validates and prints diff without POST/PUT.
 - `attributes.name`, `attributes.time`, and non-empty `attributes.cells` must be present.
 - `GET /api/v1/notebooks/template/{id}` may return 404; clone template in UI first, then operate on the cloned notebook ID.
 
@@ -232,12 +236,12 @@ Dashboard caveats:
 ## Validation
 
 - `ddctl doctor` shows `credentials found: true`, `datadog reachable: true`, and `auth query valid: true`.
-- `ddctl logs-query --query "*" --limit 1` returns at least one log event or empty result without error.
-- `ddctl logs-query --count-only --query "*" --from now-1h --json` returns metadata with `hit_count`.
+- `ddctl logs query --query "*" --limit 1` returns at least one log event or empty result without error.
+- `ddctl logs query --count-only --query "*" --from now-1h --json` returns metadata with `hit_count`.
 - `ddctl monitors list` returns a list of monitors (even if empty).
 - `ddctl monitors get <id>` returns raw monitor JSON with `options` when present.
-- `ddctl events-list --from now-2h` returns events or empty without error.
-- `ddctl metrics-query --query "avg:system.cpu.user{*}" --from now-1h` returns series or "no data".
+- `ddctl events list --from now-2h` returns events or empty without error.
+- `ddctl metrics query --query "avg:system.cpu.user{*}" --from now-1h` returns series or "no data".
 - `ddctl notebooks get <id>` returns notebook details without error.
 - `ddctl notebooks validate --from-file <file>` reports timeseries queries; no-data is a warning.
 - `ddctl dashboards get <id>` returns dashboard details without error.
@@ -246,7 +250,7 @@ Dashboard caveats:
 
 ## Known obstacles and workarounds
 
-### HTTP 401 from logs-query even after a successful doctor
+### HTTP 401 from logs query even after a successful doctor
 
 `ddctl` relies on browser session cookies and CSRF token. If auth is stale server-side, queries fail.
 
@@ -264,22 +268,22 @@ When `hit_count=0` but rows are returned, those rows are often housekeeping/rete
 ### Endpoint-focused investigation
 
 ```bash
-ddctl logs-query --query 'service:<svc> kube_namespace:<env> @request.endpoint:"<endpoint>"' --from now-2h --count-only --json
-ddctl logs-query --query 'service:<svc> kube_namespace:<env> @request.endpoint:"<endpoint>"' --from now-2h --all --limit 200 --json
+ddctl logs query --query 'service:<svc> kube_namespace:<env> @request.endpoint:"<endpoint>"' --from now-2h --count-only --json
+ddctl logs query --query 'service:<svc> kube_namespace:<env> @request.endpoint:"<endpoint>"' --from now-2h --all --limit 200 --json
 ```
 
 ### Identity/email-focused investigation
 
 ```bash
-ddctl logs-query --query 'service:<svc> kube_namespace:<env> *<email-or-id>*' --from now-24h --count-only --json
-ddctl logs-query --query 'service:<svc> kube_namespace:<env> *<email-or-id>*' --from now-24h --all --limit 200 --json
+ddctl logs query --query 'service:<svc> kube_namespace:<env> *<email-or-id>*' --from now-24h --count-only --json
+ddctl logs query --query 'service:<svc> kube_namespace:<env> *<email-or-id>*' --from now-24h --all --limit 200 --json
 ```
 
 ### Error-vs-throughput investigation
 
 ```bash
-ddctl logs-query --query 'service:<svc> kube_namespace:<env> status:error' --from now-2h --count-only --json
-ddctl logs-query --query 'service:<svc> kube_namespace:<env> <throughput-signal-query>' --from now-2h --count-only --json
+ddctl logs query --query 'service:<svc> kube_namespace:<env> status:error' --from now-2h --count-only --json
+ddctl logs query --query 'service:<svc> kube_namespace:<env> <throughput-signal-query>' --from now-2h --count-only --json
 ```
 
 ### Chrome HAR exports strip cookies (do not use HAR files for init)
@@ -303,7 +307,7 @@ ddctl init --curl-file ~/curl.txt
 
 ### Ideal request to copy is /api/v1/logs-analytics/list
 
-This is the exact endpoint `ddctl logs-query` calls. Copying a cURL from this request guarantees:
+This is the exact endpoint `ddctl logs query` calls. Copying a cURL from this request guarantees:
 - All required cookies are present (`dd_csrf_token`, `DD_S`, `dogweb`, `_dd_s_v2`, etc.)
 - The CSRF token is visible in the request body as `_authentication_token` (for debugging)
 - The cookie string is confirmed to be fresh and working

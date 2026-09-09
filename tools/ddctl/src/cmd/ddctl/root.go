@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -50,23 +49,34 @@ func Execute(args []string, stdout, stderr io.Writer) int {
 		return runInitCmd(ctx, svcs, cfg, cmdArgs, stdout, stderr)
 	case "doctor":
 		return runDoctorCmd(ctx, svcs, cfg, cmdArgs, stdout, stderr)
+	case "logs":
+		return runLogsCmd(ctx, svcs, cfg, cmdArgs, stdout, stderr)
+	case "metrics":
+		return runMetricsCmd(ctx, svcs, cfg, cmdArgs, stdout, stderr)
+	case "events":
+		return runEventsCmd(ctx, svcs, cfg, cmdArgs, stdout, stderr)
 	case "logs-query":
-		return runLogsQueryCmd(ctx, svcs, cfg, cmdArgs, stdout, stderr)
+		return rejectRemovedCommand(stderr, cfg, "logs-query", "ddctl logs query")
+	case "metrics-query":
+		return rejectRemovedCommand(stderr, cfg, "metrics-query", "ddctl metrics query")
+	case "events-list":
+		return rejectRemovedCommand(stderr, cfg, "events-list", "ddctl events list")
 	case "monitors":
 		return runMonitorsCmd(ctx, svcs, cfg, cmdArgs, stdout, stderr)
-	case "events-list":
-		return runEventsListCmd(ctx, svcs, cfg, cmdArgs, stdout, stderr)
-	case "metrics-query":
-		return runMetricsQueryCmd(ctx, svcs, cfg, cmdArgs, stdout, stderr)
 	case "notebooks":
 		return runNotebooksCmd(ctx, svcs, cfg, cmdArgs, stdout, stderr)
 	case "dashboards":
 		return runDashboardsCmd(ctx, svcs, cfg, cmdArgs, stdout, stderr)
 	default:
-		err := fail.NewValidation("unknown command", "use one of: init, doctor, logs-query, monitors, events-list, metrics-query, notebooks, dashboards")
+		err := fail.NewValidation("unknown command", "use one of: init, doctor, logs, metrics, events, monitors, notebooks, dashboards")
 		writeError(stderr, err, cfg)
 		return fail.ExitCode(err)
 	}
+}
+
+func rejectRemovedCommand(stderr io.Writer, cfg app.Config, oldCmd, newUsage string) int {
+	writeError(stderr, fail.NewValidation("removed command "+oldCmd, "use: "+newUsage), cfg)
+	return fail.CodeValidation
 }
 
 type rootOptions struct {
@@ -136,10 +146,10 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "Commands:")
 	fmt.Fprintln(w, "  init            Store DataDog session cookies from stdin or --curl-file")
 	fmt.Fprintln(w, "  doctor          Check credentials, DataDog auth, and reachability")
-	fmt.Fprintln(w, "  logs-query      Query DataDog logs")
+	fmt.Fprintln(w, "  logs            Query DataDog logs (ddctl logs query)")
+	fmt.Fprintln(w, "  metrics         Query DataDog metrics (ddctl metrics query)")
+	fmt.Fprintln(w, "  events          List DataDog events (ddctl events list)")
 	fmt.Fprintln(w, "  monitors        Manage DataDog monitors (list/get/validate/create/update/mute/unmute/delete)")
-	fmt.Fprintln(w, "  events-list     List DataDog events")
-	fmt.Fprintln(w, "  metrics-query   Query DataDog timeseries metrics")
 	fmt.Fprintln(w, "  notebooks       Manage DataDog notebooks (get/create/update/validate)")
 	fmt.Fprintln(w, "  dashboards      Manage DataDog dashboards (get/list/search/create/update/validate/clone/delete)")
 	fmt.Fprintln(w, "")
@@ -152,20 +162,19 @@ func printUsage(w io.Writer) {
 }
 
 func writeError(w io.Writer, err error, cfg app.Config) {
-	var e *fail.Error
-	if cfg.JSON && errors.As(err, &e) {
+	e := fail.AsError(err)
+	if cfg.JSON {
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
 		_ = enc.Encode(e.Envelope())
 		return
 	}
-	if errors.As(err, &e) {
-		if e.Action == "" {
-			fmt.Fprintf(w, "Error [%s]: %s\n", e.Category, e.Message)
-			return
-		}
+	if e.Action == "" {
+		fmt.Fprintf(w, "Error [%s]: %s\n", e.Category, e.Message)
+	} else {
 		fmt.Fprintf(w, "Error [%s]: %s\nAction: %s\n", e.Category, e.Message, e.Action)
-		return
 	}
-	fmt.Fprintf(w, "Error: %s\n", strings.TrimSpace(err.Error()))
+	if cfg.Debug && e.Details != "" {
+		fmt.Fprintf(w, "Details: %s\n", e.Details)
+	}
 }

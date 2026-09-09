@@ -50,8 +50,7 @@ Online query preflight (best effort):
   `$name.value` then `$name` before preflight.
 - APM, RUM, SLO, issue_stream, cloud cost: warn and skip.
 - Empty metric series or log `hit_count=0` is a **warning**
-  (exit 0), not invalidity. `--allow-empty-series` is accepted
-  for compatibility.
+  (exit 0), not invalidity.
 
 Text summary:
 

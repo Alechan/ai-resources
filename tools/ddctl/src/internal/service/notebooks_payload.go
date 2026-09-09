@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/fail"
 )
@@ -208,4 +209,105 @@ func assertNotebookCell(cell any) error {
 		return fail.NewValidation("invalid cell definition", "expected attributes.definition object in each cell")
 	}
 	return nil
+}
+
+func notebookCanonicalURL(site, id string) string {
+	if site == "" {
+		site = "datadoghq.com"
+	}
+	if id == "" {
+		return ""
+	}
+	return fmt.Sprintf("https://app.%s/notebook/%s", site, id)
+}
+
+func notebookIDFromEnvelope(env map[string]any) string {
+	data := mustMap(env["data"])
+	if data == nil {
+		return ""
+	}
+	switch v := data["id"].(type) {
+	case string:
+		return v
+	case float64:
+		return strconv.FormatInt(int64(v), 10)
+	case int:
+		return strconv.Itoa(v)
+	case int64:
+		return strconv.FormatInt(v, 10)
+	default:
+		if v == nil {
+			return ""
+		}
+		return fmt.Sprint(v)
+	}
+}
+
+func attachNotebookURL(out map[string]any, site, id string) {
+	if id == "" {
+		id = notebookIDFromEnvelope(out)
+	}
+	if url := notebookCanonicalURL(site, id); url != "" {
+		out["url"] = url
+	}
+}
+
+func notebookModifiedAt(env map[string]any) string {
+	data := mustMap(env["data"])
+	if data == nil {
+		return ""
+	}
+	if meta := mustMap(data["meta"]); meta != nil {
+		if v, ok := meta["modified_at"]; ok && v != nil {
+			return fmt.Sprint(v)
+		}
+	}
+	if attrs := mustMap(data["attributes"]); attrs != nil {
+		if v, ok := attrs["modified_at"]; ok && v != nil {
+			return fmt.Sprint(v)
+		}
+	}
+	return ""
+}
+
+func notebookName(env map[string]any) string {
+	data := mustMap(env["data"])
+	attrs := mustMap(data["attributes"])
+	name, _ := attrs["name"].(string)
+	return name
+}
+
+func notebookCellCount(env map[string]any) int {
+	data := mustMap(env["data"])
+	attrs := mustMap(data["attributes"])
+	cells, _ := attrs["cells"].([]any)
+	return len(cells)
+}
+
+func stripNotebookIdentity(env map[string]any) {
+	data := mustMap(env["data"])
+	if data == nil {
+		return
+	}
+	delete(data, "id")
+	delete(data, "meta")
+	delete(data, "relationships")
+}
+
+func SemanticDiffNotebookPayloads(current, next map[string]any) string {
+	var parts []string
+	curName := notebookName(current)
+	nextName := notebookName(next)
+	if curName != nextName {
+		parts = append(parts, fmt.Sprintf("name: %q -> %q", curName, nextName))
+	}
+	curCells := notebookCellCount(current)
+	nextCells := notebookCellCount(next)
+	if curCells != nextCells {
+		parts = append(parts, fmt.Sprintf("cells: %d -> %d", curCells, nextCells))
+	}
+	if len(parts) == 0 {
+		return "no semantic changes"
+	}
+	return strings.Join(parts, "; ")
 }

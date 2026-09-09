@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/app"
+	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/auth"
 	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/curl"
 	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/fail"
 	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/service"
@@ -41,12 +42,21 @@ func runInitCmd(ctx context.Context, svcs app.Services, cfg app.Config, args []s
 	}
 
 	if *clear {
+		if err := auth.RequireDarwin(); err != nil {
+			writeError(stderr, err, cfg)
+			return fail.ExitCode(err)
+		}
 		if err := svcs.Auth.Delete(); err != nil {
 			writeError(stderr, fail.NewAuth(err.Error(), ""), cfg)
 			return fail.CodeAuth
 		}
 		fmt.Fprintln(stdout, "credentials cleared")
 		return fail.CodeOK
+	}
+
+	if err := auth.RequireDarwin(); err != nil {
+		writeError(stderr, err, cfg)
+		return fail.ExitCode(err)
 	}
 
 	if *curlFile == "" {
@@ -197,7 +207,7 @@ func sanitizeCookieString(cookieStr string) (string, []string) {
 		dropped = append(dropped, name)
 	}
 	sort.Strings(dropped)
-	return strings.Join(clean, "; "), dropped
+	return auth.JoinCookiePairs(clean), dropped
 }
 
 func validateInitAuthMaterial(cookieStr string) error {

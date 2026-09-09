@@ -100,7 +100,6 @@ Flags:
   --from <time>                      Query window start (default: now-30d)
   --to <time>                        Query window end (default: now)
   --template-variable <name=value>   Substitute $name.value in queries (repeatable)
-  --allow-empty-series               Accepted for compatibility; no-data is always a warning
 
 Input JSON shape:
   A raw dashboard object from dashboards get, or {"dashboard":{...}}.
@@ -139,7 +138,6 @@ Flags:
   --from <time>                      Query window start (default: now-30d)
   --to <time>                        Query window end (default: now)
   --template-variable <name=value>   Substitute $name.value during validate (repeatable)
-  --allow-empty-series               Accepted for compatibility; no-data is always a warning
 
 Input JSON shape:
   Raw dashboard object or {"dashboard":{...}}.
@@ -177,7 +175,6 @@ Flags:
   --from <time>                      Query window start (default: now-30d)
   --to <time>                        Query window end (default: now)
   --template-variable <name=value>   Substitute $name.value during validate (repeatable)
-  --allow-empty-series               Accepted for compatibility; no-data is always a warning
 
 Input JSON shape:
   Same as create / get. Required: title, widgets, layout_type.

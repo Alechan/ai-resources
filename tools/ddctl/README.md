@@ -13,7 +13,7 @@ Most commands are read-only; notebook and dashboard create/update commands perfo
    - Find a POST request to `/api/v1/logs-analytics/list`
    - Right-click → Copy → Copy as cURL
 3. Initialize (recommended): `pbpaste | ddctl init`
-4. Try a query: `ddctl logs-query --query "service:my-svc"`
+4. Try a query: `ddctl logs query --query "service:my-svc"`
 
 ## Build and Install
 
@@ -106,10 +106,10 @@ Usage: ddctl [global flags] <command> [flags]
 Commands:
   init            Store DataDog session cookies from a cURL file or stdin
   doctor          Check credentials, DataDog auth, and reachability
-  logs-query      Query DataDog logs
-  monitors        Manage DataDog monitors (list/get/validate/create/update/mute/unmute)
-  events-list     List DataDog events
-  metrics-query   Query DataDog timeseries metrics
+  logs            Query DataDog logs (`ddctl logs query`)
+  metrics         Query DataDog metrics (`ddctl metrics query`)
+  events          List DataDog events (`ddctl events list`)
+  monitors        Manage DataDog monitors (list/get/validate/create/update/mute/unmute/delete)
   notebooks       Manage DataDog notebooks (get/create/update/validate)
   dashboards      Manage DataDog dashboards (get/list/search/create/update/validate/clone/delete)
 
@@ -120,6 +120,17 @@ Global flags:
   --json                 JSON output
   --debug                Debug logging
 ```
+
+### Default time windows
+
+| Command | Default `--from` | Notes |
+| --- | --- | --- |
+| `logs query` | `now-1h` | Ad-hoc investigation |
+| `metrics query` | `now-1h` | Ad-hoc investigation |
+| `events list` | `now-1h` | Ad-hoc investigation |
+| `dashboards validate/create/update` | `now-30d` | Widget preflight |
+| `monitors validate/create/update` | `now-24h` | Monitor query preflight |
+| `notebooks validate/create/update` | `now-30d` | Timeseries preflight |
 
 ### init
 
@@ -160,22 +171,22 @@ ddctl doctor --json
 
 `doctor` exits non-zero if auth validation fails.
 
-### logs-query
+### logs query
 
 Query DataDog logs with a search filter and time range.
 
 ```bash
-ddctl logs-query --query "service:my-service status:error" --from now-1h --to now
-ddctl logs-query -q "env:prod" --from now-4h --limit 100 --json
+ddctl logs query --query "service:my-service status:error" --from now-1h --to now
+ddctl logs query -q "env:prod" --from now-4h --limit 100 --json
 
 # Manual pagination: next_cursor is printed at the end of single-page results
-ddctl logs-query --cursor '<next_cursor value>'
+ddctl logs query --cursor '<next_cursor value>'
 
 # Auto-paginate up to --limit total events
-ddctl logs-query --all --limit 200
+ddctl logs query --all --limit 200
 
 # Count-only mode (total matches, metadata-only output)
-ddctl logs-query --query "service:my-service" --from now-1h --count-only --json
+ddctl logs query --query "service:my-service" --from now-1h --count-only --json
 ```
 
 Accepted time formats: `now`, `now-1h`, `now-30m`, `now-2d`, `now-1w`, Unix milliseconds, RFC3339.
@@ -220,35 +231,35 @@ Text list output: `[id] state type name tags:…`
 Production monitors (tags `env:prod` or `env:production`) require
 `--confirm <id>` on unmute.
 
-### events-list
+### events list
 
-List DataDog events in a time range. Uses the same browser endpoint as logs-query
+List DataDog events in a time range. Uses the same browser endpoint as `ddctl logs query`
 (`/api/v1/logs-analytics/list?type=feed`), so it works with session-cookie auth.
 
 ```bash
-ddctl events-list --from now-2h
-ddctl events-list --from now-4h --tags env:prod --json
-ddctl events-list --from now-1h --sources containerd,kubernetes --limit 20
-ddctl events-list --from now-1h --count-only --json
-ddctl events-list --cursor '<next_cursor value>'
+ddctl events list --from now-2h
+ddctl events list --from now-4h --tags env:prod --json
+ddctl events list --from now-1h --sources containerd,kubernetes --limit 20
+ddctl events list --from now-1h --count-only --json
+ddctl events list --cursor '<next_cursor value>'
 ```
 
-### metrics-query
+### metrics query
 
 Query DataDog timeseries metrics. Returns summary stats (min/avg/max/last) per series.
 
 ```bash
 # Summary stats (default)
-ddctl metrics-query --query "avg:system.cpu.user{service:my-svc}" --from now-1h
+ddctl metrics query --query "avg:system.cpu.user{service:my-svc}" --from now-1h
 
 # Multiple series with grouping
-ddctl metrics-query --query "sum:aws.sqs.number_of_messages_received{service:tapir} by {queuename}.as_rate()" --from now-1h
+ddctl metrics query --query "sum:aws.sqs.number_of_messages_received{service:tapir} by {queuename}.as_rate()" --from now-1h
 
 # JSON output (stats only, no pointlist)
-ddctl metrics-query --query "avg:system.cpu.user{*}" --from now-4h --json
+ddctl metrics query --query "avg:system.cpu.user{*}" --from now-4h --json
 
 # JSON with full pointlist
-ddctl metrics-query --query "avg:system.cpu.user{*}" --from now-1h --json --raw
+ddctl metrics query --query "avg:system.cpu.user{*}" --from now-1h --json --raw
 ```
 
 ### notebooks
@@ -353,7 +364,7 @@ Notes:
 - **Parse error**: ensure the cURL command includes a `-b` or `Cookie:` header with session cookies, or use `--curl-file` if pasting fails.
 - **Missing CSRF token**: the cURL must include an `-H 'x-csrf-token: ...'` header; use the Logs Explorer (not Settings) to capture it.
 - **Template endpoint 404**: `GET /api/v1/notebooks/template/{id}` may return 404. Clone the template in UI first, then use the cloned notebook ID.
-- **Blank notebook charts**: preflight timeseries with `ddctl notebooks validate` or `ddctl metrics-query` before writing.
+- **Blank notebook charts**: preflight timeseries with `ddctl notebooks validate` or `ddctl metrics query` before writing.
 - **SQS metric with no data**: avoid `kube_namespace` filters on `aws.sqs.*`; scope by `queuename` tags.
 - **Keychain access denied**: macOS may prompt for keychain access; accept the prompt.
 - **`command not found`**: ensure `$GOPATH/bin` (or `$HOME/go/bin`) is on `PATH`.
