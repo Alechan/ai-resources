@@ -18,6 +18,9 @@ func TestExecuteHelp(t *testing.T) {
 	if !strings.Contains(stdout.String(), "notebooks") {
 		t.Fatalf("expected usage output to include notebooks command, got:\n%s", stdout.String())
 	}
+	if !strings.Contains(stdout.String(), "dashboards") {
+		t.Fatalf("expected usage output to include dashboards command, got:\n%s", stdout.String())
+	}
 }
 
 func TestExecuteNoArgs(t *testing.T) {

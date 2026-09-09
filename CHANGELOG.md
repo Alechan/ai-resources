@@ -4,6 +4,9 @@
 
 ### Added
 
+- `ddctl dashboards`: get, validate, create, and update DataDog dashboards
+  (query preflight for metrics/logs, `--replace-all`, `--dry-run`,
+  `--expected-modified-at`)
 - `slackctl conversation export` now preserves root and thread-reply reactions
   in normalized JSON schema version 2, resolves returned reactor IDs as
   participants, and renders clearly labeled reaction metadata in Markdown;

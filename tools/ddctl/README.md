@@ -2,7 +2,7 @@
 
 `ddctl` is an unofficial DataDog CLI maintained in this repository under `tools/ddctl/src`.
 It authenticates using DataDog session cookies stored in the macOS Keychain.
-Most commands are read-only; notebook create/update commands perform explicit user-requested writes.
+Most commands are read-only; notebook and dashboard create/update commands perform explicit user-requested writes.
 
 ## Quick Start
 
@@ -112,6 +112,7 @@ Commands:
   events-list     List DataDog events
   metrics-query   Query DataDog timeseries metrics
   notebooks       Manage DataDog notebooks (get/create/update/validate)
+  dashboards      Manage DataDog dashboards (get/create/update/validate)
 
 Global flags:
   --site <domain>        DataDog site domain (default: datadoghq.com)
@@ -277,6 +278,43 @@ Notes:
 - `update` is full replacement (`PUT`), not patch.
 - `--replace-all` is mandatory for update.
 - `attributes.name`, `attributes.time`, and non-empty `attributes.cells` are required.
+
+### dashboards
+
+Manage DataDog dashboards through browser-authenticated API endpoints.
+
+```bash
+# Get dashboard summary (text)
+ddctl dashboards get cec-7ix-73w
+
+# Get raw dashboard JSON
+ddctl --json dashboards get cec-7ix-73w > dashboard.json
+
+# Validate payload and preflight metric/log queries
+ddctl dashboards validate --from-file dashboard.json --from now-30d
+ddctl dashboards validate --from-file dashboard.json --from now-30d --allow-empty-series
+
+# Create from a previous get (identity fields are stripped)
+ddctl dashboards create --from-file dashboard.json --title "DELETE ME ddctl-dev copy"
+
+# Preview an update without writing
+ddctl dashboards update cec-7ix-73w --from-file dashboard.json --replace-all --dry-run
+
+# Update (full replacement; explicit confirmation required)
+ddctl dashboards update cec-7ix-73w --from-file dashboard.json --replace-all
+```
+
+`dashboards create` and `dashboards update` accept a raw dashboard object or
+`{"dashboard":{...}}`.
+
+Required fields: `title`, non-empty `widgets`, `layout_type` of `ordered` or `free`.
+
+Notes:
+- `update` is full replacement (`PUT`), not patch.
+- `--replace-all` is mandatory for update.
+- Create/update run validate unless `--skip-validate`.
+- `--expected-modified-at` aborts if the remote `modified_at` does not match.
+- Query preflight covers metrics and logs only; other data sources warn and skip.
 
 ## Troubleshooting
 

@@ -1,13 +1,13 @@
 ---
 name: ddctl-datadog-ops
-description: Procedures for querying DataDog logs, metrics, monitors, and notebooks using the ddctl CLI tool. Use when investigating DataDog alerts, checking service health, querying logs/metrics, or reading/updating notebooks.
+description: Procedures for querying DataDog logs, metrics, monitors, notebooks, and dashboards using the ddctl CLI tool. Use when investigating DataDog alerts, checking service health, querying logs/metrics, or reading/updating notebooks and dashboards.
 ---
 
 # ddctl-datadog-ops
 
 ## Purpose
 
-Provide a repeatable procedure for querying DataDog logs, metrics, monitors, and notebooks via `ddctl`.
+Provide a repeatable procedure for querying DataDog logs, metrics, monitors, notebooks, and dashboards via `ddctl`.
 
 ## When To Use
 
@@ -15,7 +15,7 @@ Provide a repeatable procedure for querying DataDog logs, metrics, monitors, and
 - Checking DataDog reachability and verifying session cookie authentication.
 - Iterative log investigation: narrowing down a time window or refining a query based on results.
 - Confirming DataDog connectivity before beginning a deeper investigation.
-- Reading or updating DataDog notebooks through CLI automation.
+- Reading or updating DataDog notebooks or dashboards through CLI automation.
 
 ## Inputs
 
@@ -197,6 +197,25 @@ Timeseries query caveats:
 - `aws.sqs.*` metrics are typically scoped by queue tags (`queuename`), not `kube_namespace`.
 - Strict `pod_name` prefixes can go stale; prefer stable service/namespace metrics where possible.
 
+### Step 10 — Dashboard operations (optional)
+
+Use dashboard commands to export, validate, and write Datadog dashboards.
+
+```bash
+ddctl dashboards get <id>
+ddctl --json dashboards get <id> > dashboard.json
+ddctl dashboards validate --from-file dashboard.json --from now-30d
+ddctl dashboards create --from-file dashboard.json --title "Copy"
+ddctl dashboards update <id> --from-file dashboard.json --replace-all --dry-run
+ddctl dashboards update <id> --from-file dashboard.json --replace-all
+```
+
+Dashboard caveats:
+- `PUT` is full replacement; `--replace-all` is required.
+- Create/update run validate unless `--skip-validate`.
+- Query preflight covers metrics and logs only; other widget data sources warn and skip.
+- `--expected-modified-at` is a client-side concurrency check; Datadog has no If-Match.
+
 ## Validation
 
 - `ddctl doctor` shows `credentials found: true`, `datadog reachable: true`, and `auth query valid: true`.
@@ -207,6 +226,8 @@ Timeseries query caveats:
 - `ddctl metrics-query --query "avg:system.cpu.user{*}" --from now-1h` returns series or "no data".
 - `ddctl notebooks get <id>` returns notebook details without error.
 - `ddctl notebooks validate --from-file <file>` reports timeseries queries and catches empty-series risks.
+- `ddctl dashboards get <id>` returns dashboard details without error.
+- `ddctl dashboards validate --from-file <file>` reports metric/log queries and catches empty-series risks.
 
 ## Known obstacles and workarounds
 
@@ -272,9 +293,9 @@ This is the exact endpoint `ddctl logs-query` calls. Copying a cURL from this re
 
 ## Safety
 
-- Most `ddctl` commands are read-only. Notebook `create`/`update` commands mutate DataDog notebooks.
-- Do not run notebook mutation commands unless the user explicitly asked for notebook creation/update.
-- For updates, prefer: get → edit file → validate → update with `--replace-all`.
+- Most `ddctl` commands are read-only. Notebook and dashboard `create`/`update` commands mutate DataDog resources.
+- Do not run notebook or dashboard mutation commands unless the user explicitly asked for create/update.
+- For updates, prefer: get → edit file → validate → update with `--replace-all` (dashboards: `--dry-run` first).
 - Stop and report to the user if DataDog returns authentication errors (HTTP 401/403).
 - Do not store or log raw cookie values.
 - Do not use `ddctl` to access DataDog data outside the scope authorized for the current session.
@@ -283,4 +304,5 @@ This is the exact endpoint `ddctl logs-query` calls. Copying a cURL from this re
 ## References
 
 - `tools/ddctl/README.md`
+- `tools/ddctl/DASHBOARDS_SPEC.md`
 - `docs/CONVENTIONS.md`

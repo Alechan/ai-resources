@@ -27,6 +27,9 @@ jobs:
       - name: Run gdrivectl tests
         run: cd tools/gdrivectl/src && go test ./...
 
+      - name: Run ddctl tests
+        run: cd tools/ddctl/src && go test ./...
+
       - name: Run slackctl tests and safety scan
         run: cd tools/slackctl/src && go test ./...
 

@@ -18,6 +18,7 @@ type Services struct {
 	EventsList   *service.EventsListService
 	MetricsQuery *service.MetricsQueryService
 	Notebooks    *service.NotebooksService
+	Dashboards   *service.DashboardsService
 	Output       *output.Writer
 }
 
@@ -26,16 +27,18 @@ func NewServices(cfg Config) Services {
 	authProvider := auth.NewKeychainProvider(cfg.Site)
 	ddClient := datadogapi.NewClient(httpClient, cfg.Site, authProvider)
 	metricsSvc := service.NewMetricsQueryService(ddClient)
+	logsSvc := service.NewLogsQueryService(ddClient)
 
 	return Services{
 		Auth:         authProvider,
 		Doctor:       service.NewDoctorService(authProvider, ddClient),
-		LogsQuery:    service.NewLogsQueryService(ddClient),
+		LogsQuery:    logsSvc,
 		MonitorsList: service.NewMonitorsListService(ddClient, cfg.Site),
 		MonitorsGet:  service.NewMonitorsGetService(ddClient, cfg.Site),
 		EventsList:   service.NewEventsListService(ddClient),
 		MetricsQuery: metricsSvc,
 		Notebooks:    service.NewNotebooksService(ddClient, metricsSvc),
+		Dashboards:   service.NewDashboardsService(ddClient, metricsSvc, logsSvc, cfg.Site),
 		Output:       output.NewWriter(),
 	}
 }

@@ -46,11 +46,13 @@ func Execute(args []string, stdout, stderr io.Writer) int {
 		return runMetricsQueryCmd(ctx, svcs, cfg, cmdArgs, stdout, stderr)
 	case "notebooks":
 		return runNotebooksCmd(ctx, svcs, cfg, cmdArgs, stdout, stderr)
+	case "dashboards":
+		return runDashboardsCmd(ctx, svcs, cfg, cmdArgs, stdout, stderr)
 	case "help", "--help", "-h":
 		printUsage(stdout)
 		return fail.CodeOK
 	default:
-		err := fail.NewValidation("unknown command", "use one of: init, doctor, logs-query, monitors-list, monitors-get, events-list, metrics-query, notebooks")
+		err := fail.NewValidation("unknown command", "use one of: init, doctor, logs-query, monitors-list, monitors-get, events-list, metrics-query, notebooks, dashboards")
 		writeError(stderr, err)
 		return fail.ExitCode(err)
 	}
@@ -128,6 +130,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  events-list     List DataDog events")
 	fmt.Fprintln(w, "  metrics-query   Query DataDog timeseries metrics")
 	fmt.Fprintln(w, "  notebooks       Manage DataDog notebooks (get/create/update/validate)")
+	fmt.Fprintln(w, "  dashboards      Manage DataDog dashboards (get/create/update/validate)")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Global flags:")
 	fmt.Fprintln(w, "  --site <domain>        DataDog site domain (default: datadoghq.com)")
