@@ -240,7 +240,7 @@ Dashboard caveats:
 - `ddctl events-list --from now-2h` returns events or empty without error.
 - `ddctl metrics-query --query "avg:system.cpu.user{*}" --from now-1h` returns series or "no data".
 - `ddctl notebooks get <id>` returns notebook details without error.
-- `ddctl notebooks validate --from-file <file>` reports timeseries queries and catches empty-series risks.
+- `ddctl notebooks validate --from-file <file>` reports timeseries queries; no-data is a warning.
 - `ddctl dashboards get <id>` returns dashboard details without error.
 - `ddctl dashboards validate --from-file <file>` reports metric/log/monitor results; no-data is a warning.
 - `ddctl dashboards validate --help` prints command-specific usage and exits 0.
