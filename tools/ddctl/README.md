@@ -289,6 +289,12 @@ ddctl notebooks update 14515133 --from-file notebook-update.json --replace-all
 
 # Validate notebook payload and preflight timeseries queries
 ddctl notebooks validate --from-file notebook.json --from now-30d
+
+# JSON output: concise mutation summary (default) or full API envelope
+ddctl --json notebooks get 14515133
+ddctl --json notebooks get 14515133 --raw > notebook-full.json
+ddctl --json notebooks create --from-file notebook-create.json --dry-run
+ddctl --json notebooks create --from-file notebook-create.json --dry-run --raw
 ```
 
 `notebooks create` and `notebooks update` accept these file shapes:
@@ -306,7 +312,14 @@ ddctl notebooks validate --from-file notebook.json --from now-30d
 Notes:
 - `update` is full replacement (`PUT`), not patch.
 - `--replace-all` is mandatory for update.
+- Create/update run validate unless `--skip-validate`.
 - `attributes.name`, `attributes.time`, and non-empty `attributes.cells` are required.
+- Structure validation covers text cells (`markdown`, `rich_text`, `note`) and chart cells (`timeseries`, `heatmap`, `distribution`, `toplist`, `query_value`, `change`, `scatterplot`, `geomap`, `servicemap`, `trace`, `log_stream`).
+- Timeseries requests accept legacy `q` or structured `queries[]` entries; preflight extracts metric queries from both.
+- Template variables (`$name` or `$name.value`) resolve to `defaults[0]` for preflight; deprecated `default` is converted to `defaults` with a warning.
+- `--json` on get/create/update prints a concise summary by default; pass `--raw` for the full Datadog response.
+- API failures parse Datadog `errors[]` when present and always include a redacted response body in `Details:` (text) or `details` (JSON).
+- No-data in the selected window is a warning (exit 0), not a validation failure.
 
 ### dashboards
 

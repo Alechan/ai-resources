@@ -191,6 +191,11 @@ ddctl --json notebooks get <id> > notebook.json
 # Validate notebook payload (timeseries preflight)
 ddctl notebooks validate --from-file notebook.json --from now-30d
 
+# JSON output: concise summary (default) or full API envelope
+ddctl --json notebooks get <id>
+ddctl --json notebooks get <id> --raw > notebook-full.json
+ddctl --json notebooks create --from-file notebook-create.json --dry-run
+
 # Create notebook (preflight runs by default; use --dry-run first)
 ddctl notebooks create --from-file notebook-create.json --name "Incident notebook" --time 1w --dry-run
 ddctl notebooks create --from-file notebook-create.json --name "Incident notebook" --time 1w
@@ -206,6 +211,9 @@ Notebook update caveats:
 - Create/update run metric preflight unless `--skip-validate`.
 - `--dry-run` validates and prints diff without POST/PUT.
 - `attributes.name`, `attributes.time`, and non-empty `attributes.cells` must be present.
+- Structure validation covers text and chart cell types; timeseries accepts `q` or `queries[]`.
+- Template variables (`$name` / `$name.value`) resolve to `defaults[0]` for preflight.
+- `--json` returns a concise summary by default; use `--raw` for the full Datadog response.
 - `GET /api/v1/notebooks/template/{id}` may return 404; clone template in UI first, then operate on the cloned notebook ID.
 
 Timeseries query caveats:

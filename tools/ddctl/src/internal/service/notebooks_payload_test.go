@@ -65,7 +65,7 @@ func TestPrepareNotebookUpdatePayload_MissingCellsFails(t *testing.T) {
 	}
 }
 
-func TestExtractTimeseriesQueries(t *testing.T) {
+func TestExtractTimeseriesQueriesFromQueriesArray(t *testing.T) {
 	raw := []byte(`{
   "data": {
     "type": "notebooks",
@@ -100,18 +100,18 @@ func TestExtractTimeseriesQueries(t *testing.T) {
 		t.Fatalf("NormalizeNotebookEnvelope() error = %v", err)
 	}
 
-	queries, err := ExtractTimeseriesQueries(env)
+	queries, err := ExtractNotebookMetricQueries(env)
 	if err != nil {
-		t.Fatalf("ExtractTimeseriesQueries() error = %v", err)
+		t.Fatalf("ExtractNotebookMetricQueries() error = %v", err)
 	}
 	if len(queries) != 2 {
 		t.Fatalf("len(queries) = %d, want 2", len(queries))
 	}
 
-	if queries[0] != "sum:aws.sqs.number_of_messages_deleted{queuename:albatross*}" {
-		t.Fatalf("queries[0] = %q", queries[0])
+	if queries[0].Original != "sum:aws.sqs.number_of_messages_deleted{queuename:albatross*}" {
+		t.Fatalf("queries[0] = %q", queries[0].Original)
 	}
-	if queries[1] != "max:aws.sqs.approximate_number_of_messages_visible{queuename:albatross*}" {
-		t.Fatalf("queries[1] = %q", queries[1])
+	if queries[1].Original != "max:aws.sqs.approximate_number_of_messages_visible{queuename:albatross*}" {
+		t.Fatalf("queries[1] = %q", queries[1].Original)
 	}
 }

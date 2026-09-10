@@ -174,7 +174,10 @@ func writeError(w io.Writer, err error, cfg app.Config) {
 	} else {
 		fmt.Fprintf(w, "Error [%s]: %s\nAction: %s\n", e.Category, e.Message, e.Action)
 	}
-	if cfg.Debug && e.Details != "" {
+	if e.Details != "" {
 		fmt.Fprintf(w, "Details: %s\n", e.Details)
+	}
+	for _, msg := range e.Errors {
+		fmt.Fprintf(w, "Server error: %s\n", msg)
 	}
 }

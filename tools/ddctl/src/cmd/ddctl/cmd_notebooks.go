@@ -40,6 +40,7 @@ func runNotebooksGetCmd(ctx context.Context, svcs app.Services, cfg app.Config, 
 	fs := flag.NewFlagSet("notebooks get", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	includeMetadata := fs.Bool("include-metadata", true, "include notebook metadata")
+	raw := fs.Bool("raw", false, "with --json, emit the full Datadog response")
 	if err := fs.Parse(parseArgs); err != nil {
 		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl notebooks get <id> [--include-metadata]"), cfg)
 		return fail.CodeValidation
@@ -61,7 +62,7 @@ func runNotebooksGetCmd(ctx context.Context, svcs app.Services, cfg app.Config, 
 		writeError(stderr, err, cfg)
 		return fail.ExitCode(err)
 	}
-	return writeNotebookResult(svcs, cfg, stdout, stderr, result)
+	return writeNotebookResult(svcs, cfg, stdout, stderr, result, *raw)
 }
 
 func runNotebooksCreateCmd(ctx context.Context, svcs app.Services, cfg app.Config, args []string, stdout, stderr io.Writer) int {
@@ -74,6 +75,7 @@ func runNotebooksCreateCmd(ctx context.Context, svcs app.Services, cfg app.Confi
 	from := fs.String("from", "now-30d", "metrics validation start time")
 	to := fs.String("to", "now", "metrics validation end time")
 	dryRun := fs.Bool("dry-run", false, "validate and print summary without POST")
+	raw := fs.Bool("raw", false, "with --json, emit the full Datadog response")
 	if err := fs.Parse(args); err != nil {
 		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl notebooks create --from-file <path>"), cfg)
 		return fail.CodeValidation
@@ -97,7 +99,7 @@ func runNotebooksCreateCmd(ctx context.Context, svcs app.Services, cfg app.Confi
 		printNotebookDryRun(stdout, result)
 		return fail.CodeOK
 	}
-	return writeNotebookResult(svcs, cfg, stdout, stderr, result)
+	return writeNotebookResult(svcs, cfg, stdout, stderr, result, *raw)
 }
 
 func runNotebooksUpdateCmd(ctx context.Context, svcs app.Services, cfg app.Config, args []string, stdout, stderr io.Writer) int {
@@ -113,6 +115,7 @@ func runNotebooksUpdateCmd(ctx context.Context, svcs app.Services, cfg app.Confi
 	dryRun := fs.Bool("dry-run", false, "validate and print diff without PUT")
 	showDiff := fs.Bool("diff", false, "include semantic diff in successful update output")
 	ifUnmodified := fs.String("if-unmodified-since", "", "abort if remote modified_at does not match")
+	raw := fs.Bool("raw", false, "with --json, emit the full Datadog response")
 	if err := fs.Parse(parseArgs); err != nil {
 		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl notebooks update <id> --from-file <path> --replace-all"), cfg)
 		return fail.CodeValidation
@@ -145,7 +148,7 @@ func runNotebooksUpdateCmd(ctx context.Context, svcs app.Services, cfg app.Confi
 		printNotebookDryRun(stdout, result)
 		return fail.CodeOK
 	}
-	return writeNotebookResult(svcs, cfg, stdout, stderr, result)
+	return writeNotebookResult(svcs, cfg, stdout, stderr, result, *raw)
 }
 
 func runNotebooksValidateCmd(ctx context.Context, svcs app.Services, cfg app.Config, args []string, stdout, stderr io.Writer) int {
@@ -176,9 +179,14 @@ func runNotebooksValidateCmd(ctx context.Context, svcs app.Services, cfg app.Con
 		return fail.CodeOK
 	}
 
-	fmt.Fprintf(stdout, "timeseries queries: %d\n", result.QueryCount)
+	fmt.Fprintf(stdout, "structure: %s\n", result.Structure)
+	fmt.Fprintf(stdout, "metric queries: %d\n", result.QueryCount)
 	for _, q := range result.Queries {
-		fmt.Fprintf(stdout, "  - %s\n", q)
+		fmt.Fprintf(stdout, "  - cell[%d] request[%d] original=%q resolved=%q", q.CellIndex, q.RequestIndex, q.Original, q.Resolved)
+		if q.NoData {
+			fmt.Fprint(stdout, " (no data)")
+		}
+		fmt.Fprintln(stdout)
 	}
 	if len(result.Warnings) > 0 {
 		fmt.Fprintln(stdout, "warnings:")
@@ -189,9 +197,18 @@ func runNotebooksValidateCmd(ctx context.Context, svcs app.Services, cfg app.Con
 	return fail.CodeOK
 }
 
-func writeNotebookResult(svcs app.Services, cfg app.Config, stdout, stderr io.Writer, result map[string]any) int {
+func writeNotebookResult(svcs app.Services, cfg app.Config, stdout, stderr io.Writer, result map[string]any, raw bool) int {
 	if cfg.JSON {
-		if err := svcs.Output.JSON(stdout, result); err != nil {
+		payload := map[string]any(result)
+		if !raw {
+			if _, ok := result["data"]; ok {
+				payload = service.NotebookMutationSummary(result, cfg.Site)
+				if diff, ok := result["diff"].(string); ok && diff != "" {
+					payload["diff"] = diff
+				}
+			}
+		}
+		if err := svcs.Output.JSON(stdout, payload); err != nil {
 			writeError(stderr, fail.NewAPI(err.Error(), "unable to encode notebook result", ""), cfg)
 			return fail.CodeAPI
 		}
@@ -223,22 +240,32 @@ func printNotebookDryRun(w io.Writer, result map[string]any) {
 }
 
 func printNotebookSummary(w io.Writer, site string, payload map[string]any) {
-	data, _ := payload["data"].(map[string]any)
-	attrs, _ := data["attributes"].(map[string]any)
-	name, _ := attrs["name"].(string)
-	id := normalizeNotebookID(data["id"])
-	cells, _ := attrs["cells"].([]any)
+	if _, ok := payload["data"]; !ok {
+		printNotebookSummaryFields(w, payload)
+		return
+	}
+	summary := service.NotebookMutationSummary(payload, site)
+	printNotebookSummaryFields(w, summary)
+}
 
-	fmt.Fprintf(w, "ID: %s\n", id)
-	fmt.Fprintf(w, "Name: %s\n", name)
-	fmt.Fprintf(w, "Cells: %d\n", len(cells))
-	if url, _ := payload["url"].(string); url != "" {
-		fmt.Fprintf(w, "URL: %s\n", url)
-	} else if id != "" {
-		if site == "" {
-			site = "datadoghq.com"
-		}
-		fmt.Fprintf(w, "URL: https://app.%s/notebook/%s\n", site, id)
+func printNotebookSummaryFields(w io.Writer, summary map[string]any) {
+	if id := fmt.Sprint(summary["id"]); id != "" && id != "<nil>" {
+		fmt.Fprintf(w, "ID:         %s\n", id)
+	}
+	if name, _ := summary["name"].(string); name != "" {
+		fmt.Fprintf(w, "Name:       %s\n", name)
+	}
+	if status, _ := summary["status"].(string); status != "" {
+		fmt.Fprintf(w, "Status:     %s\n", status)
+	}
+	if count, ok := summary["cell_count"].(int); ok {
+		fmt.Fprintf(w, "Cell count: %d\n", count)
+	}
+	if ids, ok := summary["cell_ids"].([]string); ok && len(ids) > 0 {
+		fmt.Fprintf(w, "Cell IDs:   %s\n", strings.Join(ids, ", "))
+	}
+	if url, _ := summary["url"].(string); url != "" {
+		fmt.Fprintf(w, "URL:        %s\n", url)
 	}
 }
 

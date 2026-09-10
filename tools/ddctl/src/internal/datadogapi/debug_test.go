@@ -5,48 +5,83 @@ import (
 	"testing"
 )
 
-func TestRedactDetails_RedactsLogEventsInDebug(t *testing.T) {
+func TestRedactResponseBody_RedactsLogEvents(t *testing.T) {
 	t.Parallel()
 
+	// Given
 	body := `{"hitCount":3,"result":{"events":[{"message":"secret log line"}]}}`
-	got := redactDetails(body, true)
+
+	// When
+	got := redactResponseBody(body)
+
+	// Then
 	if strings.Contains(got, "secret log line") {
-		t.Fatalf("redactDetails leaked event body: %q", got)
+		t.Fatalf("redactResponseBody leaked event body: %q", got)
 	}
 	if !strings.Contains(got, "redacted") {
-		t.Fatalf("redactDetails = %q", got)
+		t.Fatalf("redactResponseBody = %q", got)
 	}
 }
 
-func TestRedactDetails_NonDebugAlwaysRedacts(t *testing.T) {
+func TestRedactResponseBody_PreservesErrorJSON(t *testing.T) {
 	t.Parallel()
 
+	// Given
 	body := `{"errors":["something failed"],"query":"avg:system.cpu.user{*}"}`
-	got := redactDetails(body, false)
-	if got != redactedBodyPlaceholder {
-		t.Fatalf("redactDetails = %q, want placeholder", got)
+
+	// When
+	got := redactResponseBody(body)
+
+	// Then
+	if got != body {
+		t.Fatalf("redactResponseBody = %q", got)
 	}
 }
 
-func TestRedactDetails_DebugRedactsTokens(t *testing.T) {
+func TestRedactResponseBody_RedactsTokens(t *testing.T) {
 	t.Parallel()
 
+	// Given
 	body := `{"_authentication_token":"secret-token","errors":["bad request"]}`
-	got := redactDetails(body, true)
+
+	// When
+	got := redactResponseBody(body)
+
+	// Then
 	if strings.Contains(got, "secret-token") {
-		t.Fatalf("redactDetails leaked token: %q", got)
+		t.Fatalf("redactResponseBody leaked token: %q", got)
+	}
+	if !strings.Contains(got, `"errors":["bad request"]`) {
+		t.Fatalf("redactResponseBody = %q", got)
 	}
 }
 
-func TestRedactDetails_DebugTruncatesLongBodies(t *testing.T) {
+func TestRedactResponseBody_TruncatesLongBodies(t *testing.T) {
 	t.Parallel()
 
+	// Given
 	body := strings.Repeat("x", 600)
-	got := redactDetails(body, true)
+
+	// When
+	got := redactResponseBody(body)
+
+	// Then
 	if len(got) > 520 {
-		t.Fatalf("redactDetails too long: len=%d", len(got))
+		t.Fatalf("redactResponseBody too long: len=%d", len(got))
 	}
 	if !strings.HasSuffix(got, "…") {
-		t.Fatalf("redactDetails = %q", got)
+		t.Fatalf("redactResponseBody = %q", got)
+	}
+}
+
+func TestRedactResponseBody_EmptyBody(t *testing.T) {
+	t.Parallel()
+
+	// When
+	got := redactResponseBody("   ")
+
+	// Then
+	if got != "" {
+		t.Fatalf("redactResponseBody = %q", got)
 	}
 }

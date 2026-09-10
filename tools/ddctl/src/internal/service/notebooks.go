@@ -37,10 +37,19 @@ type NotebookValidateInput struct {
 	To       string
 }
 
+type NotebookQueryReport struct {
+	CellIndex    int    `json:"cell_index"`
+	RequestIndex int    `json:"request_index"`
+	Original     string `json:"original"`
+	Resolved     string `json:"resolved"`
+	NoData       bool   `json:"no_data,omitempty"`
+}
+
 type NotebookValidateResult struct {
-	QueryCount int      `json:"query_count"`
-	Queries    []string `json:"queries"`
-	Warnings   []string `json:"warnings"`
+	Structure  string                `json:"structure"`
+	QueryCount int                   `json:"query_count"`
+	Queries    []NotebookQueryReport `json:"queries"`
+	Warnings   []string              `json:"warnings"`
 }
 
 type NotebooksService struct {
@@ -81,13 +90,14 @@ func (s *NotebooksService) Create(ctx context.Context, input NotebookMutationInp
 		return nil, err
 	}
 	if input.DryRun {
-		attrs := mustMap(mustMap(payload["data"])["attributes"])
-		name, _ := attrs["name"].(string)
-		cells, _ := attrs["cells"].([]any)
+		prepared := cloneNotebookEnvelope(env)
+		if _, err := PrepareNotebookSchema(prepared); err != nil {
+			return nil, err
+		}
 		return NotebookMutationResult{
 			"dry_run":    true,
-			"name":       name,
-			"cell_count": len(cells),
+			"name":       notebookName(prepared),
+			"cell_count": notebookCellCount(prepared),
 		}, nil
 	}
 	var out map[string]any
@@ -162,52 +172,63 @@ func (s *NotebooksService) Validate(ctx context.Context, input NotebookValidateI
 	if err != nil {
 		return NotebookValidateResult{}, err
 	}
-	queries, err := ExtractTimeseriesQueries(env)
-	if err != nil {
-		return NotebookValidateResult{}, err
-	}
-	result := NotebookValidateResult{
-		QueryCount: len(queries),
-		Queries:    queries,
-	}
-
-	for _, q := range queries {
-		metricsResult, err := s.metrics.Run(ctx, MetricsQueryInput{
-			Query: q,
-			From:  input.From,
-			To:    input.To,
-		})
-		if err != nil {
-			return NotebookValidateResult{}, err
-		}
-		if len(metricsResult.Series) == 0 {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("query returned no data: %s", q))
-		}
-	}
-	return result, nil
+	return s.validateEnvelope(ctx, env, input.From, input.To)
 }
 
 func (s *NotebooksService) validatePrepared(ctx context.Context, env map[string]any, from, to string) error {
+	_, err := s.validateEnvelope(ctx, env, from, to)
+	return err
+}
+
+func (s *NotebooksService) validateEnvelope(ctx context.Context, env map[string]any, from, to string) (NotebookValidateResult, error) {
 	if from == "" {
 		from = "now-30d"
 	}
 	if to == "" {
 		to = "now"
 	}
-	queries, err := ExtractTimeseriesQueries(env)
+	warnings, err := PrepareNotebookSchema(env)
 	if err != nil {
-		return err
+		return NotebookValidateResult{}, err
+	}
+	queries, err := ExtractNotebookMetricQueries(env)
+	if err != nil {
+		return NotebookValidateResult{}, err
+	}
+	result := NotebookValidateResult{
+		Structure:  "valid",
+		QueryCount: len(queries),
+		Warnings:   append([]string(nil), warnings...),
 	}
 	for _, q := range queries {
-		if _, err := s.metrics.Run(ctx, MetricsQueryInput{
-			Query: q,
+		report := NotebookQueryReport{
+			CellIndex:    q.CellIndex,
+			RequestIndex: q.RequestIndex,
+			Original:     q.Original,
+			Resolved:     q.Resolved,
+		}
+		metricsResult, err := s.metrics.Run(ctx, MetricsQueryInput{
+			Query: q.Resolved,
 			From:  from,
 			To:    to,
-		}); err != nil {
-			return err
+		})
+		if err != nil {
+			return NotebookValidateResult{}, fail.NewResourceValidation(
+				"notebook",
+				fmt.Sprintf("cell[%d] request[%d] invalid query: %s", q.CellIndex, q.RequestIndex, err.Error()),
+				"fix the metric query or template variable defaults",
+			)
 		}
+		if len(metricsResult.Series) == 0 {
+			report.NoData = true
+			result.Warnings = append(result.Warnings, fmt.Sprintf(
+				"cell[%d] request[%d] query returned no data: original=%q resolved=%q",
+				q.CellIndex, q.RequestIndex, q.Original, q.Resolved,
+			))
+		}
+		result.Queries = append(result.Queries, report)
 	}
-	return nil
+	return result, nil
 }
 
 func loadNotebookEnvelopeFromFile(path string) (map[string]any, error) {

@@ -1,0 +1,131 @@
+{
+  "data": {
+    "attributes": {
+      "cells": [
+        {
+          "attributes": {
+            "definition": {
+              "text": "# Operations runbook",
+              "type": "markdown"
+            }
+          },
+          "id": "cell-md-1",
+          "type": "notebook_cells"
+        },
+        {
+          "attributes": {
+            "definition": {
+              "text": "## Heartbeat missing",
+              "type": "markdown"
+            }
+          },
+          "id": "cell-md-2",
+          "type": "notebook_cells"
+        },
+        {
+          "attributes": {
+            "definition": {
+              "requests": [
+                {
+                  "display_type": "bars",
+                  "q": "sum:beaver.survey.enhancer_run.count{kube_namespace:$environment.value,survey_type:csat} by {result}.as_count()"
+                }
+              ],
+              "title": "Enhancer completed runs",
+              "type": "timeseries"
+            },
+            "graph_size": "m",
+            "split_by": {"keys": [], "tags": []},
+            "time": null
+          },
+          "id": "cell-ts-1",
+          "type": "notebook_cells"
+        },
+        {
+          "attributes": {
+            "definition": {
+              "requests": [
+                {
+                  "display_type": "line",
+                  "q": "max:kubernetes_state.job.succeeded{kube_namespace:$environment.value,kube_cronjob:beaver-survey-enhancer}"
+                },
+                {
+                  "display_type": "line",
+                  "q": "max:kubernetes_state.job.failed{kube_namespace:$environment.value,kube_cronjob:beaver-survey-enhancer}"
+                }
+              ],
+              "title": "Kubernetes Job status",
+              "type": "timeseries"
+            },
+            "graph_size": "m",
+            "split_by": {"keys": [], "tags": []},
+            "time": null
+          },
+          "id": "cell-ts-2",
+          "type": "notebook_cells"
+        },
+        {
+          "attributes": {
+            "definition": {
+              "requests": [
+                {
+                  "display_type": "bars",
+                  "q": "sum:beaver.survey.enhancement.run_count{kube_namespace:$environment.value}.as_count()"
+                }
+              ],
+              "title": "Legacy heartbeat",
+              "type": "timeseries"
+            },
+            "graph_size": "m",
+            "split_by": {"keys": [], "tags": []},
+            "time": null
+          },
+          "id": "cell-ts-3",
+          "type": "notebook_cells"
+        },
+        {
+          "attributes": {
+            "definition": {
+              "text": "### Investigation steps",
+              "type": "markdown"
+            }
+          },
+          "id": "cell-md-3",
+          "type": "notebook_cells"
+        },
+        {
+          "attributes": {
+            "definition": {
+              "text": "### Signal interpretation",
+              "type": "markdown"
+            }
+          },
+          "id": "cell-md-4",
+          "type": "notebook_cells"
+        },
+        {
+          "attributes": {
+            "definition": {
+              "text": "### Recovery criteria",
+              "type": "markdown"
+            }
+          },
+          "id": "cell-md-5",
+          "type": "notebook_cells"
+        }
+      ],
+      "name": "DELETE ME ddctl notebook regression fixture",
+      "status": "published",
+      "template_variables": [
+        {
+          "available_values": ["production", "acceptance"],
+          "defaults": ["production"],
+          "name": "environment",
+          "prefix": "kube_namespace"
+        }
+      ],
+      "time": {"live_span": "4h"}
+    },
+    "type": "notebooks"
+  }
+}

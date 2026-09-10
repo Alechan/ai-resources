@@ -37,10 +37,14 @@ Use ddctl notebooks <subcommand> --help for flags and examples.
 `
 
 const helpNotebooksGet = `Usage:
-  ddctl notebooks get <id> [--include-metadata]
+  ddctl notebooks get <id> [--include-metadata] [--raw]
 
 Positional arguments:
   id    Notebook ID
+
+Flags:
+  --include-metadata   Include metadata in the API request (default: true)
+  --raw                With --json, emit the full Datadog response (default: concise summary)
 `
 
 const helpNotebooksCreate = `Usage:
@@ -54,6 +58,10 @@ Flags:
   --from <time>            Preflight window start (default: now-30d)
   --to <time>              Preflight window end (default: now)
   --dry-run                Validate and print summary without POST
+  --raw                    With --json, emit the full Datadog response (default: concise summary)
+
+Preflight resolves template variables ($name or $name.value) using defaults[0].
+Timeseries requests may use legacy "q" or structured queries[] entries.
 
 Mutates DataDog. Do not run unless create was requested.
 `
@@ -70,6 +78,7 @@ Flags:
   --dry-run                          Validate and print diff without PUT
   --diff                             Include semantic diff on successful update
   --if-unmodified-since <rfc3339>    Abort if remote modified_at does not match
+  --raw                              With --json, emit the full Datadog response (default: concise summary)
 
 Mutates DataDog. PUT is full replacement; --replace-all is required.
 `
@@ -77,8 +86,12 @@ Mutates DataDog. PUT is full replacement; --replace-all is required.
 const helpNotebooksValidate = `Usage:
   ddctl notebooks validate --from-file <path> [--from <time>] [--to <time>]
 
-Validate notebook structure and preflight timeseries metric queries.
+Validate notebook structure and preflight chart metric queries.
 Does not change Datadog.
+
+Structure checks cover all supported cell types (text and chart definitions).
+Timeseries requests accept legacy "q" or structured queries[] entries.
+Template variables ($name or $name.value) resolve to defaults[0] for preflight.
 
 No-data in the selected window is a warning (exit 0), not invalidity.
 `

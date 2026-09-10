@@ -184,15 +184,11 @@ func (c *Client) do(req *http.Request, out any, started time.Time) error {
 		)
 	}
 	if status < 200 || status >= 300 {
-		return fail.NewAPI(
-			fmt.Sprintf("HTTP %d", status),
-			"inspect API response",
-			redactDetails(string(bodyBytes), c.debug != nil),
-		)
+		return apiErrorFromResponse(status, string(bodyBytes))
 	}
 	if out != nil && len(bodyBytes) > 0 {
 		if err := json.Unmarshal(bodyBytes, out); err != nil {
-			return fail.NewAPI("failed to decode response", "", redactDetails(string(bodyBytes), c.debug != nil))
+			return fail.NewAPI("failed to decode response", "", redactResponseBody(string(bodyBytes)))
 		}
 	}
 	return nil

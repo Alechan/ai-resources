@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-const redactedBodyPlaceholder = "[response body redacted]"
+const redactedLogEventsPlaceholder = "[response body redacted: may contain log events]"
 
 var (
 	emailLikeRe = regexp.MustCompile(`[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}`)
@@ -35,17 +35,14 @@ func (l stderrDebugLogger) Printf(format string, args ...any) {
 	fmt.Fprintf(l.w, "debug: "+format+"\n", args...)
 }
 
-func redactDetails(body string, debug bool) string {
+func redactResponseBody(body string) string {
 	body = strings.TrimSpace(body)
 	if body == "" {
 		return ""
 	}
-	if !debug {
-		return redactedBodyPlaceholder
-	}
 	lower := strings.ToLower(body)
 	if strings.Contains(lower, `"events"`) || strings.Contains(lower, `"hitcount"`) {
-		return "[response body redacted: may contain log events]"
+		return redactedLogEventsPlaceholder
 	}
 	body = tokenKeyRe.ReplaceAllString(body, `"$1":"[redacted]"`)
 	body = emailLikeRe.ReplaceAllString(body, "[redacted-email]")

@@ -7,6 +7,30 @@ import (
 	"testing"
 )
 
+const testNotebookTimeseriesCell = `{
+      "type": "notebook_cells",
+      "attributes": {
+        "graph_size": "m",
+        "split_by": {"keys": [], "tags": []},
+        "time": null,
+        "definition": {
+          "type": "timeseries",
+          "requests": [{
+            "queries": [{
+              "data_source": "metrics",
+              "name": "query1",
+              "query": "avg:system.cpu.user{*}"
+            }]
+          }]
+        }
+      }
+    }`
+
+const testNotebookMarkdownCell = `{
+      "type": "notebook_cells",
+      "attributes": {"definition": {"type": "markdown", "text": "x"}}
+    }`
+
 func TestNotebooksValidate_EmptySeriesWarns(t *testing.T) {
 	t.Parallel()
 
@@ -22,21 +46,7 @@ func TestNotebooksValidate_EmptySeriesWarns(t *testing.T) {
   "attributes": {
     "name": "Notebook A",
     "time": {"live_span":"1w"},
-    "cells": [{
-      "type": "notebook_cells",
-      "attributes": {
-        "definition": {
-          "type": "timeseries",
-          "requests": [{
-            "queries": [{
-              "data_source": "metrics",
-              "name": "query1",
-              "query": "avg:system.cpu.user{*}"
-            }]
-          }]
-        }
-      }
-    }]
+    "cells": [` + testNotebookTimeseriesCell + `]
   }
 }`)
 	got, err := svc.Validate(context.Background(), NotebookValidateInput{
@@ -71,21 +81,7 @@ func TestNotebooksCreate_ValidateBeforePost(t *testing.T) {
   "attributes": {
     "name": "Notebook A",
     "time": {"live_span":"1w"},
-    "cells": [{
-      "type": "notebook_cells",
-      "attributes": {
-        "definition": {
-          "type": "timeseries",
-          "requests": [{
-            "queries": [{
-              "data_source": "metrics",
-              "name": "query1",
-              "query": "avg:system.cpu.user{*}"
-            }]
-          }]
-        }
-      }
-    }]
+    "cells": [` + testNotebookTimeseriesCell + `]
   }
 }`)
 	_, err := svc.Create(context.Background(), NotebookMutationInput{FilePath: file})
@@ -114,21 +110,7 @@ func TestNotebooksCreate_SkipValidatePosts(t *testing.T) {
   "attributes": {
     "name": "Notebook A",
     "time": {"live_span":"1w"},
-    "cells": [{
-      "type": "notebook_cells",
-      "attributes": {
-        "definition": {
-          "type": "timeseries",
-          "requests": [{
-            "queries": [{
-              "data_source": "metrics",
-              "name": "query1",
-              "query": "avg:system.cpu.user{*}"
-            }]
-          }]
-        }
-      }
-    }]
+    "cells": [` + testNotebookTimeseriesCell + `]
   }
 }`)
 	_, err := svc.Create(context.Background(), NotebookMutationInput{
@@ -170,10 +152,7 @@ func TestNotebooksUpdate_IfUnmodifiedSinceAborts(t *testing.T) {
   "attributes": {
     "name": "Notebook A",
     "time": {"live_span":"1w"},
-    "cells": [{
-      "type": "notebook_cells",
-      "attributes": {"definition": {"type": "note", "content": "x"}}
-    }]
+    "cells": [` + testNotebookMarkdownCell + `]
   }
 }`)
 	_, err := svc.Update(context.Background(), NotebookMutationInput{
@@ -214,10 +193,7 @@ func TestNotebooksUpdate_DryRunNoPut(t *testing.T) {
   "attributes": {
     "name": "Notebook B",
     "time": {"live_span":"1w"},
-    "cells": [{
-      "type": "notebook_cells",
-      "attributes": {"definition": {"type": "note", "content": "y"}}
-    }]
+    "cells": [` + testNotebookMarkdownCell + `]
   }
 }`)
 	got, err := svc.Update(context.Background(), NotebookMutationInput{

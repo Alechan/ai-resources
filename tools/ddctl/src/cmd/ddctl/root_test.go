@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/app"
 	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/fail"
 )
 
@@ -428,5 +429,30 @@ func TestExecute_JSONErrorEnvelope(t *testing.T) {
 	}
 	if strings.Contains(stderr.String(), "Error [validation]:") {
 		t.Fatalf("stderr should be JSON only: %s", stderr.String())
+	}
+}
+
+func TestWriteError_IncludesRedactedResponseBody(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	writeError(&buf, &fail.Error{
+		Category:   "api",
+		Message:    "Bad Request",
+		Action:     "inspect API response",
+		Details:    `{"errors":["Bad Request"]}`,
+		HTTPStatus: 400,
+		Errors:     []string{"Bad Request"},
+	}, app.Config{})
+
+	out := buf.String()
+	for _, want := range []string{
+		"Error [api]: Bad Request",
+		"Details: {\"errors\":[\"Bad Request\"]}",
+		"Server error: Bad Request",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("writeError missing %q:\n%s", want, out)
+		}
 	}
 }

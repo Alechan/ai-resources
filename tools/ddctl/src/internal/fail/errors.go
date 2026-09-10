@@ -3,14 +3,16 @@ package fail
 import "errors"
 
 type Error struct {
-	Category    string `json:"type"`
-	Message     string `json:"message"`
-	Action      string `json:"action,omitempty"`
-	Details     string `json:"details,omitempty"`
-	Resource    string `json:"resource,omitempty"`
-	WidgetIndex string `json:"widget_index,omitempty"`
-	WidgetTitle string `json:"widget_title,omitempty"`
-	QueryIndex  *int   `json:"query_index,omitempty"`
+	Category    string   `json:"type"`
+	Message     string   `json:"message"`
+	Action      string   `json:"action,omitempty"`
+	Details     string   `json:"details,omitempty"`
+	Resource    string   `json:"resource,omitempty"`
+	WidgetIndex string   `json:"widget_index,omitempty"`
+	WidgetTitle string   `json:"widget_title,omitempty"`
+	QueryIndex  *int     `json:"query_index,omitempty"`
+	HTTPStatus  int      `json:"http_status,omitempty"`
+	Errors      []string `json:"errors,omitempty"`
 }
 
 func (e *Error) Error() string { return e.Message }
@@ -40,6 +42,12 @@ func (e *Error) Envelope() map[string]any {
 	}
 	if e.QueryIndex != nil {
 		m["query_index"] = *e.QueryIndex
+	}
+	if e.HTTPStatus > 0 {
+		m["http_status"] = e.HTTPStatus
+	}
+	if len(e.Errors) > 0 {
+		m["errors"] = e.Errors
 	}
 	return out
 }
