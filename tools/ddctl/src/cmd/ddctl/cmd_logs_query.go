@@ -13,90 +13,62 @@ import (
 
 func runLogsQueryCmd(ctx context.Context, svcs app.Services, cfg app.Config, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("logs query", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
-
-	query := fs.String("query", "*", "search query string")
-	fs.String("q", "*", "search query string (shorthand)")
-	from := fs.String("from", "now-1h", "start time (relative or ISO-8601)")
-	to := fs.String("to", "now", "end time (relative or ISO-8601)")
-	limit := fs.Int("limit", 50, "max results per page (1-1000); when --all is set, max total results")
-	all := fs.Bool("all", false, "auto-paginate until no more results or --limit is reached")
-	countOnly := fs.Bool("count-only", false, "return only metadata and total hit count")
-	cursor := fs.String("cursor", "", "pagination cursor from a previous result's next_cursor field")
-
-	if err := fs.Parse(args); err != nil {
-		err = fail.NewValidation(err.Error(), "usage: ddctl logs query [flags]")
-		writeError(stderr, err, cfg)
-		return fail.ExitCode(err)
+	flags, err := parseLogsQueryFlags(fs, args)
+	if err != nil {
+		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl logs query [flags]"), cfg)
+		return fail.CodeValidation
 	}
 
-	// -q shorthand takes precedence if provided and differs from default
-	if q := fs.Lookup("q"); q != nil && q.Value.String() != "*" {
-		query = &[]string{q.Value.String()}[0]
+	if flags.limit < 1 || flags.limit > 1000 {
+		writeError(stderr, fail.NewValidation("--limit must be between 1 and 1000", "provide a value between 1 and 1000"), cfg)
+		return fail.CodeValidation
+	}
+	if flags.fields != "" && flags.countOnly {
+		writeError(stderr, fail.NewValidation("--fields cannot be used with --count-only", "remove --fields from count-only queries"), cfg)
+		return fail.CodeValidation
+	}
+	if flags.fields != "" && !cfg.JSON {
+		writeError(stderr, fail.NewValidation("--fields requires --json", "pass --json or use text mode with --verbose"), cfg)
+		return fail.CodeValidation
 	}
 
-	if *limit < 1 || *limit > 1000 {
-		err := fail.NewValidation("--limit must be between 1 and 1000", "provide a value between 1 and 1000")
-		writeError(stderr, err, cfg)
-		return fail.ExitCode(err)
-	}
+	fieldList := service.ParseLogFieldList(flags.fields)
+	verboseKeys := service.ParseLogFieldList(flags.verboseKeys)
 
-	if *countOnly {
-		if *cursor != "" {
-			err := fail.NewValidation("--cursor cannot be used with --count-only", "remove --cursor from count-only queries")
-			writeError(stderr, err, cfg)
-			return fail.ExitCode(err)
+	if flags.countOnly {
+		if flags.cursor != "" {
+			writeError(stderr, fail.NewValidation("--cursor cannot be used with --count-only", "remove --cursor from count-only queries"), cfg)
+			return fail.CodeValidation
 		}
-		return runLogsQueryCountOnly(ctx, svcs, cfg, stdout, stderr, *query, *from, *to)
+		return runLogsQueryCountOnly(ctx, svcs, cfg, stdout, stderr, flags.query, flags.from, flags.to)
 	}
 
-	if *all {
-		return runLogsQueryAll(ctx, svcs, cfg, stdout, stderr, *query, *from, *to, *limit)
+	if flags.all {
+		return runLogsQueryAll(ctx, svcs, cfg, stdout, stderr, flags, fieldList, verboseKeys)
 	}
 
-	input := service.LogsQueryInput{
-		Query:  *query,
-		From:   *from,
-		To:     *to,
-		Limit:  *limit,
-		Cursor: *cursor,
-	}
-
-	result, err := svcs.LogsQuery.Run(ctx, input)
+	result, err := svcs.LogsQuery.Run(ctx, service.LogsQueryInput{
+		Query:  flags.query,
+		From:   flags.from,
+		To:     flags.to,
+		Limit:  flags.limit,
+		Cursor: flags.cursor,
+	})
 	if err != nil {
 		writeError(stderr, err, cfg)
 		return fail.ExitCode(err)
 	}
-
-	if cfg.JSON {
-		if err := svcs.Output.JSON(stdout, result); err != nil {
-			writeError(stderr, fail.NewAPI(err.Error(), "unable to encode logs result", ""), cfg)
-			return fail.CodeAPI
-		}
-		return fail.CodeOK
-	}
-
-	printLogEvents(stdout, result.Data)
-	fmt.Fprintf(stdout, "# hit_count: %d\n", result.HitCount)
-	for _, warning := range result.Warnings {
-		fmt.Fprintf(stdout, "warning: %s\n", warning)
-	}
-	if result.NextCursor != "" {
-		fmt.Fprintf(stdout, "# next_cursor: %s\n", result.NextCursor)
-		fmt.Fprintf(stdout, "# use: ddctl logs query --cursor '%s' to fetch the next page\n", result.NextCursor)
-	}
-	return fail.CodeOK
+	return writeLogsQueryResult(svcs, cfg, stdout, stderr, result, fieldList, flags.verbose, verboseKeys)
 }
 
 func runLogsQueryCountOnly(ctx context.Context, svcs app.Services, cfg app.Config, stdout, stderr io.Writer, query, from, to string) int {
-	input := service.LogsQueryInput{
+	result, err := svcs.LogsQuery.Run(ctx, service.LogsQueryInput{
 		Query:     query,
 		From:      from,
 		To:        to,
 		Limit:     1,
 		CountOnly: true,
-	}
-	result, err := svcs.LogsQuery.Run(ctx, input)
+	})
 	if err != nil {
 		writeError(stderr, err, cfg)
 		return fail.ExitCode(err)
@@ -133,98 +105,55 @@ func runLogsQueryCountOnly(ctx context.Context, svcs app.Services, cfg app.Confi
 	return fail.CodeOK
 }
 
-// runLogsQueryAll auto-paginates until no cursor remains or the total limit is reached.
-func runLogsQueryAll(ctx context.Context, svcs app.Services, cfg app.Config, stdout, stderr io.Writer, query, from, to string, maxTotal int) int {
-	const pageSize = 50 // fetch at most 50 per page; DataDog's v1 limit
-	var allEvents []service.LogEvent
-	warningsSet := make(map[string]struct{})
-	hitCount := 0
-	truncated := false
-	cursor := ""
-
-	for {
-		remaining := maxTotal - len(allEvents)
-		if remaining <= 0 {
-			truncated = true
-			break
-		}
-		batchLimit := pageSize
-		if remaining < batchLimit {
-			batchLimit = remaining
-		}
-
-		input := service.LogsQueryInput{
-			Query:  query,
-			From:   from,
-			To:     to,
-			Limit:  batchLimit,
-			Cursor: cursor,
-		}
-		result, err := svcs.LogsQuery.Run(ctx, input)
-		if err != nil {
-			writeError(stderr, err, cfg)
-			return fail.ExitCode(err)
-		}
-		if result.HitCount > hitCount {
-			hitCount = result.HitCount
-		}
-		for _, warning := range result.Warnings {
-			warningsSet[warning] = struct{}{}
-		}
-		allEvents = append(allEvents, result.Data...)
-		if result.NextCursor == "" || len(result.Data) == 0 {
-			if len(allEvents) >= maxTotal && hitCount > len(allEvents) {
-				truncated = true
-			}
-			break
-		}
-		cursor = result.NextCursor
+func runLogsQueryAll(ctx context.Context, svcs app.Services, cfg app.Config, stdout, stderr io.Writer, flags logsQueryFlags, fieldList, verboseKeys []string) int {
+	result, err := svcs.LogsQuery.RunAll(ctx, service.LogsQueryInput{
+		Query: flags.query,
+		From:  flags.from,
+		To:    flags.to,
+	}, flags.limit)
+	if err != nil {
+		writeError(stderr, err, cfg)
+		return fail.ExitCode(err)
 	}
+	return writeLogsQueryResult(svcs, cfg, stdout, stderr, result, fieldList, flags.verbose, verboseKeys)
+}
 
-	warnings := make([]string, 0, len(warningsSet))
-	for w := range warningsSet {
-		warnings = append(warnings, w)
-	}
-	combined := service.LogsQueryResult{
-		Data:          allEvents,
-		HitCount:      hitCount,
-		Warnings:      warnings,
-		ReturnedCount: len(allEvents),
-	}
-	if truncated {
-		combined.Truncated = true
-		combined.Limit = maxTotal
-	}
-
+func writeLogsQueryResult(svcs app.Services, cfg app.Config, stdout, stderr io.Writer, result service.LogsQueryResult, fieldList []string, verbose bool, verboseKeys []string) int {
 	if cfg.JSON {
-		if err := svcs.Output.JSON(stdout, combined); err != nil {
+		payload := service.ProjectLogsQueryResult(result, fieldList)
+		if err := svcs.Output.JSON(stdout, payload); err != nil {
 			writeError(stderr, fail.NewAPI(err.Error(), "unable to encode logs result", ""), cfg)
 			return fail.CodeAPI
 		}
 		return fail.CodeOK
 	}
-	printLogEvents(stdout, allEvents)
-	fmt.Fprintf(stdout, "# hit_count: %d\n", hitCount)
-	for _, warning := range warnings {
+
+	printLogEvents(stdout, result.Data, verbose, verboseKeys)
+	fmt.Fprintf(stdout, "# hit_count: %d\n", result.HitCount)
+	for _, warning := range result.Warnings {
 		fmt.Fprintf(stdout, "warning: %s\n", warning)
 	}
-	if truncated {
-		if hitCount > 0 {
-			fmt.Fprintf(stdout, "returned %d of at least %d (limit %d reached)\n", len(allEvents), hitCount, maxTotal)
+	if result.Truncated {
+		if result.HitCount > 0 {
+			fmt.Fprintf(stdout, "returned %d of at least %d (limit %d reached)\n", result.ReturnedCount, result.HitCount, result.Limit)
 		} else {
-			fmt.Fprintf(stdout, "returned %d results (limit %d reached)\n", len(allEvents), maxTotal)
+			fmt.Fprintf(stdout, "returned %d results (limit %d reached)\n", result.ReturnedCount, result.Limit)
 		}
+	}
+	if result.NextCursor != "" {
+		fmt.Fprintf(stdout, "# next_cursor: %s\n", result.NextCursor)
+		fmt.Fprintf(stdout, "# use: ddctl logs query --cursor '%s' to fetch the next page\n", result.NextCursor)
 	}
 	return fail.CodeOK
 }
 
-func printLogEvents(w io.Writer, events []service.LogEvent) {
+func printLogEvents(w io.Writer, events []service.LogEvent, verbose bool, verboseKeys []string) {
 	for _, event := range events {
-		fmt.Fprintf(w, "%s [%s] %s: %s\n",
-			event.Attributes.Timestamp,
-			event.Attributes.Status,
-			event.Attributes.Service,
-			event.Attributes.Message,
-		)
+		fmt.Fprintf(w, "%s [%s] %s: %s\n", event.Timestamp, event.Status, event.Service, event.Message)
+		if verbose {
+			for _, line := range service.VerboseCustomLines(event, verboseKeys) {
+				fmt.Fprintf(w, "  %s\n", line)
+			}
+		}
 	}
 }

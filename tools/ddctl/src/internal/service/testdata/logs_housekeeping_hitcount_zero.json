@@ -1,0 +1,21 @@
+{
+  "hitCount": 0,
+  "result": {
+    "events": [
+      {
+        "id": "1",
+        "columns": [null, "2026-05-26T12:03:57.505Z", "i-host", "albatross", null],
+        "event": {
+          "custom": {
+            "log": {
+              "retention": {
+                "period": "7"
+              }
+            }
+          }
+        }
+      }
+    ],
+    "paging": {"after": ""}
+  }
+}

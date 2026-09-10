@@ -88,39 +88,53 @@ If `datadog reachable: false` or you get HTTP 401, the cookies are expired — g
 
 ### Step 4 — Query logs
 
-```
+```bash
 ddctl logs query --query "service:<name> status:error" --from now-1h
-ddctl logs query --query "*" --from now-4h --limit 50 --json
-
-# Count first for large windows
 ddctl logs query --query "service:<name>" --from now-24h --count-only --json
+ddctl logs query --all --limit 200 --json
 
-# Single-page result shows cursor hint if more pages exist:
-# next_cursor: Aw...
-# Use it:
-ddctl logs query --cursor '<next_cursor value>'
+# Forensics projection (JSON)
+ddctl logs query -q 'service:beaver status:error' \
+  --fields timestamp,msg,body,status_code,url,email,payload --json
 
-# Auto-paginate (collects up to --limit total events across pages):
-ddctl logs query --all --limit 200
+# Verbose text mode
+ddctl logs query -q 'service:beaver status:error' --verbose
+
+# Export incident bundle
+ddctl logs export -q 'service:beaver *ORDER*' \
+  --from '<start>' --to '<end>' -o datadog-logs.ndjson
+
+# Fetch one event by ID
+ddctl logs get <event_id> --from '<start>' --to '<end>' --json
 ```
+
+JSON events are flat objects with a full `custom` map. Use `--fields` for targeted
+forensics (`body`, `status_code`, `url`, `email`, `payload`, `error`, `msg`).
 
 Supported `--from`/`--to` formats: `now`, `now-1h`, `now-30m`, `now-2d`, `now-1w`, Unix milliseconds, RFC3339.
 
 ### Step 4.1 — Field discovery workflow (mandatory)
 
 1. Start with `--count-only` to verify there is data before sampling rows.
-2. Run a narrow query and inspect returned fields (`timestamp`, `status`, `service`, `host`, `message`).
-3. If needed fields are missing, assume they are not queryable from this endpoint and move to Dashboard/raw logs.
-4. Treat `hit_count` as the source of truth for matching volume.
-5. If `hit_count=0` but rows are returned, treat rows as housekeeping/noise unless proven otherwise.
+2. Run a narrow query with `--json` and inspect `custom` keys (`msg`, `body`, `payload`, `error`).
+3. Use `--fields` to project only the keys needed for root-cause analysis.
+4. Export with `logs export` when you need the full incident timeline offline.
+5. Treat `hit_count` as the source of truth for matching volume.
+6. If `hit_count=0` but rows are returned, treat rows as housekeeping/noise unless proven otherwise.
 
-### Step 4.2 — Logged fields vs queryable fields
+### Step 4.2 — Mytheresa log field conventions
 
-- Application code may log structured fields (e.g. `log.WithField("panic_stacktrace", ...)`).
-- DataDog can store them, but `ddctl logs query` may not expose them as queryable/returned fields.
-- Practical rule:
-  1. query with standard fields first,
-  2. then use Dashboard/raw logs for deep structured payload inspection.
+Common Beaver/custom fields inside `event.custom`:
+
+| Field | Use |
+|-------|-----|
+| `msg` | Human-readable line (preferred for `message`) |
+| `body` | HTTP response body (Dixa client) |
+| `method`, `url`, `status_code` | HTTP client debug |
+| `payload` | Business object (NPS message, survey request) |
+| `email`, `error`, `reason` | Domain identifiers and failures |
+
+Kubernetes tags (`kube_namespace`, `pod_name`) are queryable in search syntax but may not appear in `custom`.
 
 ### Step 5 — Monitor operations
 
@@ -255,6 +269,8 @@ Dashboard caveats:
 - `ddctl doctor` shows `credentials found: true`, `datadog reachable: true`, and `auth query valid: true`.
 - `ddctl logs query --query "*" --limit 1` returns at least one log event or empty result without error.
 - `ddctl logs query --count-only --query "*" --from now-1h --json` returns metadata with `hit_count`.
+- `ddctl logs query --json` returns flat events with `custom.body`, `custom.payload`, and related forensics fields.
+- `ddctl logs export -o <path>` writes NDJSON/CSV and prints an stderr summary.
 - `ddctl monitors list` returns a list of monitors (even if empty).
 - `ddctl monitors get <id>` returns raw monitor JSON with `options` when present.
 - `ddctl events list --from now-2h` returns events or empty without error.

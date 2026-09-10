@@ -106,7 +106,7 @@ Usage: ddctl [global flags] <command> [flags]
 Commands:
   init            Store DataDog session cookies from a cURL file or stdin
   doctor          Check credentials, DataDog auth, and reachability
-  logs            Query DataDog logs (`ddctl logs query`)
+  logs            Query and export DataDog logs (query, export, get)
   metrics         Query DataDog metrics (`ddctl metrics query`)
   events          List DataDog events (`ddctl events list`)
   monitors        Manage DataDog monitors (list/get/validate/create/update/mute/unmute/delete)
@@ -125,7 +125,7 @@ Global flags:
 
 | Command | Default `--from` | Notes |
 | --- | --- | --- |
-| `logs query` | `now-1h` | Ad-hoc investigation |
+| `logs query` / `logs export` / `logs get` | `now-1h` | Log forensics and export |
 | `metrics query` | `now-1h` | Ad-hoc investigation |
 | `events list` | `now-1h` | Ad-hoc investigation |
 | `dashboards validate/create/update` | `now-30d` | Widget preflight |
@@ -171,13 +171,21 @@ ddctl doctor --json
 
 `doctor` exits non-zero if auth validation fails.
 
-### logs query
+### logs
 
-Query DataDog logs with a search filter and time range.
+Query, export, and fetch DataDog logs with full structured fields from `event.custom`.
+
+#### logs query
 
 ```bash
 ddctl logs query --query "service:my-service status:error" --from now-1h --to now
 ddctl logs query -q "env:prod" --from now-4h --limit 100 --json
+
+# Forensics projection (JSON only)
+ddctl logs query -q 'service:beaver status:error' --fields timestamp,msg,body,status_code,url --json
+
+# Verbose text mode shows selected custom fields
+ddctl logs query -q 'service:beaver status:error' --verbose
 
 # Manual pagination: next_cursor is printed at the end of single-page results
 ddctl logs query --cursor '<next_cursor value>'
@@ -189,16 +197,29 @@ ddctl logs query --all --limit 200
 ddctl logs query --query "service:my-service" --from now-1h --count-only --json
 ```
 
+#### logs export
+
+```bash
+ddctl logs export -q 'service:beaver *NL999930011*' \
+  --from '2026-09-10T13:19:00Z' --to '2026-09-10T13:21:00Z' \
+  --format ndjson -o datadog-logs.ndjson
+```
+
+#### logs get
+
+```bash
+ddctl logs get evt-dixa-response --from '2026-09-10T13:19:00Z' --to '2026-09-10T13:21:00Z' --json
+```
+
 Accepted time formats: `now`, `now-1h`, `now-30m`, `now-2d`, `now-1w`, Unix milliseconds, RFC3339.
 
 Notes:
-- Output includes `hit_count` in text and JSON.
+- JSON events are flat objects with a full `custom` map (breaking change: `data[].attributes` removed).
+- `message` prefers `msg` over `body` for Mytheresa services.
+- Output includes `hit_count`, `returned_count`, and `warnings` in text and JSON.
 - When Datadog returns rows with `hitCount=0`, `warnings` are emitted.
-- When `--all --limit` truncates results, JSON includes:
-  - `truncated`
-  - `returned_count`
-  - `limit`
-  - `hit_count` (when available)
+- When `--all --limit` truncates results, JSON includes `truncated`, `returned_count`, `limit`, and `hit_count`.
+- `--fields` applies only to `--json` on query/get; use `--verbose` for richer text output.
 
 ### monitors
 

@@ -374,12 +374,17 @@ func TestExecute_QueryGroupsHelp(t *testing.T) {
 		{
 			name: "logs group",
 			args: []string{"logs", "--help"},
-			shouldContain: []string{"ddctl logs", "query"},
+			shouldContain: []string{"ddctl logs", "query", "export", "get"},
 		},
 		{
 			name: "logs query help",
 			args: []string{"logs", "query", "--help"},
-			shouldContain: []string{"ddctl logs query", "--count-only", "--all"},
+			shouldContain: []string{"ddctl logs query", "--count-only", "--all", "--fields", "--verbose"},
+		},
+		{
+			name: "logs export help",
+			args: []string{"logs", "export", "--help"},
+			shouldContain: []string{"ddctl logs export", "--format", "--output"},
 		},
 		{
 			name: "metrics group",

@@ -1,0 +1,47 @@
+{
+  "hitCount": 2,
+  "result": {
+    "events": [
+      {
+        "id": "evt-dixa-response",
+        "columns": ["info", "2026-09-10T13:20:02.820Z", "i-host", "beaver-api", null],
+        "event": {
+          "status": "info",
+          "timestamp": "2026-09-10T13:20:02.820Z",
+          "host": "i-host",
+          "service": "beaver-api",
+          "custom": {
+            "msg": "dixa response payload",
+            "body": "{\"message\":\"Create EndUser [id:None] failed with [errors:EmailExists]\"}",
+            "method": "POST",
+            "status_code": 400,
+            "url": "https://dev.dixa.io/v1/endusers",
+            "group": "dixa-processor"
+          }
+        }
+      },
+      {
+        "id": "evt-nps-payload",
+        "columns": ["error", "2026-09-10T13:20:02.820Z", "i-host", "beaver-api", null],
+        "event": {
+          "status": "error",
+          "timestamp": "2026-09-10T13:20:02.820Z",
+          "host": "i-host",
+          "service": "beaver-api",
+          "custom": {
+            "msg": "failed to create NPSSurveyConversation",
+            "email": "user@example.com",
+            "error": "find or create end user: create end user: dixa api error: Bad Request (status 400)",
+            "payload": {
+              "OrderID": "NL999930011",
+              "Email": "user@example.com",
+              "NPSScore": 0,
+              "Channel": "15"
+            }
+          }
+        }
+      }
+    ],
+    "paging": {"after": ""}
+  }
+}

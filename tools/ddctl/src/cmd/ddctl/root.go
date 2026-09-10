@@ -146,7 +146,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "Commands:")
 	fmt.Fprintln(w, "  init            Store DataDog session cookies from stdin or --curl-file")
 	fmt.Fprintln(w, "  doctor          Check credentials, DataDog auth, and reachability")
-	fmt.Fprintln(w, "  logs            Query DataDog logs (ddctl logs query)")
+	fmt.Fprintln(w, "  logs            Query and export DataDog logs (query, export, get)")
 	fmt.Fprintln(w, "  metrics         Query DataDog metrics (ddctl metrics query)")
 	fmt.Fprintln(w, "  events          List DataDog events (ddctl events list)")
 	fmt.Fprintln(w, "  monitors        Manage DataDog monitors (list/get/validate/create/update/mute/unmute/delete)")
