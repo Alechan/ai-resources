@@ -138,7 +138,7 @@ func runMonitorsCreateCmd(ctx context.Context, svcs app.Services, cfg app.Config
 	fromFile := fs.String("from-file", "", "path to monitor JSON payload")
 	skipValidate := fs.Bool("skip-validate", false, "skip validation before create")
 	dryRun := fs.Bool("dry-run", false, "validate and print summary; do not POST")
-	muted := fs.Bool("muted", false, "mute monitor after create")
+	muted := fs.Bool("muted", false, "create with global mute in the initial API request")
 	from := fs.String("from", "now-24h", "query preflight start time")
 	to := fs.String("to", "now", "query preflight end time")
 	if err := fs.Parse(args); err != nil {
@@ -335,6 +335,13 @@ func printMonitorSummary(w io.Writer, site string, payload map[string]any) {
 	}
 	if q, _ := payload["query"].(string); q != "" {
 		fmt.Fprintf(w, "Query:  %s\n", q)
+	}
+	if muted, ok := payload["muted"].(bool); ok && muted {
+		scope, _ := payload["mute_scope"].(string)
+		if scope == "" {
+			scope = "*"
+		}
+		fmt.Fprintf(w, "Muted:  true (scope: %s)\n", scope)
 	}
 }
 

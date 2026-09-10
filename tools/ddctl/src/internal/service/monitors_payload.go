@@ -155,6 +155,87 @@ func attachMonitorURL(payload map[string]any, site string, id int64) {
 	payload["url"] = monitorCanonicalURL(site, id)
 }
 
+const globalMonitorMuteScope = "*"
+
+func monitorOptions(payload map[string]any) map[string]any {
+	opts, _ := payload["options"].(map[string]any)
+	return opts
+}
+
+func ensureMonitorOptions(payload map[string]any) map[string]any {
+	opts, ok := payload["options"].(map[string]any)
+	if !ok || opts == nil {
+		opts = map[string]any{}
+		payload["options"] = opts
+	}
+	return opts
+}
+
+func monitorSilenced(payload map[string]any) map[string]any {
+	opts := monitorOptions(payload)
+	if opts == nil {
+		return nil
+	}
+	raw, _ := opts["silenced"].(map[string]any)
+	return raw
+}
+
+func monitorPayloadHasExplicitSilenced(payload map[string]any) bool {
+	opts := monitorOptions(payload)
+	if opts == nil {
+		return false
+	}
+	_, ok := opts["silenced"]
+	return ok
+}
+
+func monitorGloballyMuted(payload map[string]any) bool {
+	silenced := monitorSilenced(payload)
+	if silenced == nil {
+		return false
+	}
+	_, ok := silenced[globalMonitorMuteScope]
+	return ok
+}
+
+func applyGlobalMute(payload map[string]any) error {
+	silenced := monitorSilenced(payload)
+	if len(silenced) > 0 {
+		if monitorGloballyMuted(payload) {
+			return nil
+		}
+		return fail.NewValidation(
+			"--muted conflicts with options.silenced in file",
+			`use global mute only: set silenced to {"*": null} or omit silenced and pass --muted`,
+		)
+	}
+	opts := ensureMonitorOptions(payload)
+	opts["silenced"] = map[string]any{globalMonitorMuteScope: nil}
+	return nil
+}
+
+func mergeMonitorSilencedFromRemote(next, current map[string]any) {
+	if monitorPayloadHasExplicitSilenced(next) {
+		return
+	}
+	currentSilenced := monitorSilenced(current)
+	if len(currentSilenced) == 0 {
+		return
+	}
+	opts := ensureMonitorOptions(next)
+	opts["silenced"] = cloneMap(currentSilenced)
+}
+
+func attachMonitorMuteMetadata(out map[string]any) {
+	if out == nil {
+		return
+	}
+	out["muted"] = monitorGloballyMuted(out)
+	if out["muted"] == true {
+		out["mute_scope"] = globalMonitorMuteScope
+	}
+}
+
 func DiffMonitorPayloads(current, next map[string]any) string {
 	left := cloneMap(current)
 	right := cloneMap(next)

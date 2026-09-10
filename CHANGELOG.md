@@ -42,7 +42,11 @@
 
 ### Changed
 
-- **Breaking:** removed `logs-query`, `metrics-query`, and `events-list`; use
+- `ddctl monitors create --muted` applies global mute in the initial POST
+  (`options.silenced["*"]`), verifies mute state before success, and reports
+  `muted` / `mute_scope` in JSON output; post-create mute is defensive only
+- `ddctl monitors update` preserves remote global mute when the file omits
+  `options.silenced`
   `ddctl logs query`, `ddctl metrics query`, and `ddctl events list`
 - HTTP client uses request context for deadlines (removed duplicate `http.Client.Timeout`)
 - CSRF body token injection limited to mutation and logs-analytics paths

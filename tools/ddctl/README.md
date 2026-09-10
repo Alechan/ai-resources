@@ -217,6 +217,7 @@ ddctl --json monitors get 12345678 > monitor.json
 # Validate, create, update
 ddctl monitors validate --from-file monitor.json
 ddctl monitors create --from-file monitor.json --dry-run
+ddctl monitors create --from-file monitor.json --muted   # global mute in initial POST
 ddctl monitors update 12345678 --from-file monitor.json --replace-all
 
 # Mute / unmute / delete
@@ -227,6 +228,12 @@ ddctl monitors delete 12345678 --confirm 12345678     # throwaway monitors only
 ```
 
 Text list output: `[id] state type name tags:…`
+
+`--muted` on create sets `options.silenced["*"]` in the initial POST and verifies
+the monitor is globally muted before exit 0. Use for batch rollouts against live
+metrics so monitors cannot notify between create and mute.
+
+Updates preserve an existing global mute when the JSON file omits `options.silenced`.
 
 Production monitors (tags `env:prod` or `env:production`) require
 `--confirm <id>` on unmute.

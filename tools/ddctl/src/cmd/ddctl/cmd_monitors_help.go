@@ -118,7 +118,7 @@ Flags:
   --from-file <path>     Monitor JSON payload (required)
   --dry-run              Validate and print summary; do not POST
   --skip-validate        Skip validation before create
-  --muted                Mute monitor after create
+  --muted                Create with global mute in the initial POST (options.silenced["*"])
   --from <time>          Query window start (default: now-24h)
   --to <time>            Query window end (default: now)
 
@@ -134,6 +134,8 @@ const helpMonitorsUpdate = `Usage:
 Replace a monitor via PUT /api/v1/monitor/{id}.
 
 This mutates Datadog. PUT is full replacement, not a patch.
+When the remote monitor is muted and the file omits options.silenced,
+ddctl preserves the existing mute automatically.
 
 Flags:
   --from-file <path>                 Monitor JSON payload (required)

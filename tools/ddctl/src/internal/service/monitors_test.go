@@ -135,7 +135,53 @@ func TestMonitorsCreate_DryRunNoPost(t *testing.T) {
 	}
 }
 
-func TestMonitorsCreate_MutedCallsMute(t *testing.T) {
+func TestMonitorsCreate_Muted_IncludesSilencedInPost(t *testing.T) {
+	t.Parallel()
+
+	var createBody string
+	var paths []string
+	dd := testDashClient(dashRoundTripper(func(req *http.Request) (*http.Response, error) {
+		paths = append(paths, req.Method+" "+req.URL.Path)
+		if req.URL.Path == "/api/v1/monitor" && req.Method == http.MethodPost {
+			b, _ := io.ReadAll(req.Body)
+			createBody = string(b)
+			return jsonResponse(http.StatusOK, `{
+  "id":12345,
+  "name":"DELETE ME ddctl-dev test",
+  "options":{"silenced":{"*":null}}
+}`), nil
+		}
+		if req.URL.Path == "/api/v1/monitor/12345" && req.Method == http.MethodGet {
+			return jsonResponse(http.StatusOK, `{
+  "id":12345,
+  "name":"DELETE ME ddctl-dev test",
+  "options":{"silenced":{"*":null}}
+}`), nil
+		}
+		return jsonResponse(http.StatusOK, `{}`), nil
+	}))
+	svc := NewMonitorsService(dd, NewMetricsQueryService(dd), "datadoghq.com")
+	file := testMonitorFile(t, testMonitorJSON)
+	got, err := svc.Create(context.Background(), MonitorMutationInput{
+		FilePath:     file,
+		SkipValidate: true,
+		Muted:        true,
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if !strings.Contains(createBody, `"*":null`) && !strings.Contains(createBody, `"*": null`) {
+		t.Fatalf("create body = %s", createBody)
+	}
+	if containsPath(paths, "POST /api/v1/monitor/12345/mute") {
+		t.Fatalf("unexpected mute endpoint: %v", paths)
+	}
+	if got["muted"] != true || got["mute_scope"] != "*" {
+		t.Fatalf("got = %#v", got)
+	}
+}
+
+func TestMonitorsCreate_Muted_VerificationFails(t *testing.T) {
 	t.Parallel()
 
 	var paths []string
@@ -144,6 +190,13 @@ func TestMonitorsCreate_MutedCallsMute(t *testing.T) {
 		if req.URL.Path == "/api/v1/monitor" && req.Method == http.MethodPost {
 			return jsonResponse(http.StatusOK, `{"id":12345,"name":"DELETE ME ddctl-dev test"}`), nil
 		}
+		if req.URL.Path == "/api/v1/monitor/12345" && req.Method == http.MethodGet {
+			return jsonResponse(http.StatusOK, `{
+  "id":12345,
+  "name":"DELETE ME ddctl-dev test",
+  "options":{"silenced":{}}
+}`), nil
+		}
 		if req.URL.Path == "/api/v1/monitor/12345/mute" {
 			return jsonResponse(http.StatusOK, `{}`), nil
 		}
@@ -151,15 +204,75 @@ func TestMonitorsCreate_MutedCallsMute(t *testing.T) {
 	}))
 	svc := NewMonitorsService(dd, NewMetricsQueryService(dd), "datadoghq.com")
 	file := testMonitorFile(t, testMonitorJSON)
-	if _, err := svc.Create(context.Background(), MonitorMutationInput{
+	_, err := svc.Create(context.Background(), MonitorMutationInput{
 		FilePath:     file,
 		SkipValidate: true,
 		Muted:        true,
-	}); err != nil {
-		t.Fatalf("Create() error = %v", err)
+	})
+	if err == nil {
+		t.Fatal("expected verification error")
+	}
+	if !strings.Contains(err.Error(), "atomic muted monitor creation was not achieved") {
+		t.Fatalf("error = %v", err)
 	}
 	if !containsPath(paths, "POST /api/v1/monitor/12345/mute") {
 		t.Fatalf("paths = %v", paths)
+	}
+}
+
+func TestMonitorsCreate_Muted_DryRun(t *testing.T) {
+	t.Parallel()
+
+	svc := NewMonitorsService(nil, nil, "datadoghq.com")
+	file := testMonitorFile(t, testMonitorJSON)
+	got, err := svc.Create(context.Background(), MonitorMutationInput{
+		FilePath:     file,
+		SkipValidate: true,
+		DryRun:       true,
+		Muted:        true,
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if got["muted"] != true || got["mute_scope"] != "*" {
+		t.Fatalf("got = %#v", got)
+	}
+}
+
+func TestMonitorsUpdate_PreservesGlobalMute(t *testing.T) {
+	t.Parallel()
+
+	var putBody string
+	dd := testDashClient(dashRoundTripper(func(req *http.Request) (*http.Response, error) {
+		if req.URL.Path == "/api/v1/monitor/12345" && req.Method == http.MethodGet {
+			return jsonResponse(http.StatusOK, `{
+  "id": 12345,
+  "name": "old",
+  "type": "metric alert",
+  "query": "avg(last_5m):avg:system.cpu.user{*} > 100",
+  "message": "old",
+  "modified": "2026-09-09T01:00:00Z",
+  "options": {"silenced": {"*": null}, "thresholds": {"critical": 100}}
+}`), nil
+		}
+		if req.URL.Path == "/api/v1/monitor/12345" && req.Method == http.MethodPut {
+			b, _ := io.ReadAll(req.Body)
+			putBody = string(b)
+			return jsonResponse(http.StatusOK, `{"id":12345}`), nil
+		}
+		return jsonResponse(http.StatusOK, `{}`), nil
+	}))
+	svc := NewMonitorsService(dd, NewMetricsQueryService(dd), "datadoghq.com")
+	file := testMonitorFile(t, testMonitorJSON)
+	if _, err := svc.Update(context.Background(), MonitorMutationInput{
+		FilePath:     file,
+		ID:           12345,
+		SkipValidate: true,
+	}, true); err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	if !strings.Contains(putBody, `"*":null`) && !strings.Contains(putBody, `"*": null`) {
+		t.Fatalf("put body = %s", putBody)
 	}
 }
 

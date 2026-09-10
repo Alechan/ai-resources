@@ -131,6 +131,7 @@ ddctl monitors get <monitor-id>
 ddctl --json monitors get <monitor-id> > monitor.json
 ddctl monitors validate --from-file monitor.json
 ddctl monitors create --from-file monitor.json --dry-run
+ddctl monitors create --from-file monitor.json --muted   # atomic global mute on create
 ddctl monitors update <id> --from-file monitor.json --replace-all
 ddctl monitors mute <id> [--until <rfc3339>]
 ddctl monitors unmute <id> [--confirm <id>]   # confirm required for env:prod
@@ -138,6 +139,11 @@ ddctl monitors delete <id> --confirm <id>     # throwaway monitors only
 ```
 
 Output format (text list): `[id] state type name tags:…`
+
+For production monitor rollouts, prefer `monitors create --muted` so Datadog receives
+`options.silenced["*"]` in the initial create request. Do not rely on a separate
+mute step after create. When updating a muted monitor, export with `monitors get --json`;
+ddctl preserves mute on update unless you change `options.silenced` in the file.
 
 ### Step 6 — List events
 

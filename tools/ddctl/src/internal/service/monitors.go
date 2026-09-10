@@ -197,9 +197,19 @@ func (s *MonitorsService) Create(ctx context.Context, input MonitorMutationInput
 			return nil, err
 		}
 	}
+	if input.Muted {
+		if err := applyGlobalMute(payload); err != nil {
+			return nil, err
+		}
+	}
 	if input.DryRun {
 		name, _ := payload["name"].(string)
-		return MonitorGetResult{"dry_run": true, "name": name, "type": payload["type"]}, nil
+		out := MonitorGetResult{"dry_run": true, "name": name, "type": payload["type"]}
+		if input.Muted {
+			out["muted"] = true
+			out["mute_scope"] = globalMonitorMuteScope
+		}
+		return out, nil
 	}
 	var out map[string]any
 	if err := s.dd.Post(ctx, "/api/v1/monitor", payload, &out); err != nil {
@@ -208,9 +218,11 @@ func (s *MonitorsService) Create(ctx context.Context, input MonitorMutationInput
 	id := monitorIDFrom(out)
 	attachMonitorURL(out, s.site, id)
 	if input.Muted && id > 0 {
-		if err := s.mute(ctx, id, ""); err != nil {
-			return nil, err
+		if err := s.verifyMutedCreate(ctx, id); err != nil {
+			return out, err
 		}
+		out["muted"] = true
+		out["mute_scope"] = globalMonitorMuteScope
 	}
 	return out, nil
 }
@@ -229,19 +241,21 @@ func (s *MonitorsService) Update(ctx context.Context, input MonitorMutationInput
 			return nil, err
 		}
 	}
+	current, err := s.Get(ctx, input.ID)
+	if err != nil {
+		return nil, err
+	}
+	if err := assertModifiedAtMatches(monitorModifiedAt(current), input.IfUnmodifiedSince, "monitor"); err != nil {
+		return nil, err
+	}
+	mergeMonitorSilencedFromRemote(payload, current)
+
 	var semantic string
 	if mutationNeedsRemoteSnapshot(MutationSnapshotInput{
 		IfUnmodifiedSince: input.IfUnmodifiedSince,
 		DryRun:            input.DryRun,
 		ShowDiff:          input.ShowDiff,
 	}) {
-		current, err := s.Get(ctx, input.ID)
-		if err != nil {
-			return nil, err
-		}
-		if err := assertModifiedAtMatches(monitorModifiedAt(current), input.IfUnmodifiedSince, "monitor"); err != nil {
-			return nil, err
-		}
 		stripIdentity := func(m map[string]any) {
 			for _, k := range monitorIdentityFields {
 				delete(m, k)
@@ -347,6 +361,22 @@ func (s *MonitorsService) Delete(ctx context.Context, input MonitorDeleteInput) 
 		"url":     url,
 		"deleted": true,
 	}, nil
+}
+
+func (s *MonitorsService) verifyMutedCreate(ctx context.Context, id int64) error {
+	current, err := s.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	if monitorGloballyMuted(current) {
+		return nil
+	}
+	_ = s.mute(ctx, id, "")
+	return fail.NewAPI(
+		"atomic muted monitor creation was not achieved",
+		fmt.Sprintf("inspect or delete monitor %d", id),
+		fmt.Sprintf("monitor_id=%d url=%s", id, monitorCanonicalURL(s.site, id)),
+	)
 }
 
 func (s *MonitorsService) mute(ctx context.Context, id int64, until string) error {
