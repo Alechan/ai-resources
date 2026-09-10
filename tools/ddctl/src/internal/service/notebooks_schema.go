@@ -171,12 +171,6 @@ func validateNotebookChartCell(cellAttrs, def map[string]any, cellIndex int, def
 				"timeseries cells require attributes.graph_size",
 			)
 		}
-		if mustMap(cellAttrs["split_by"]) == nil {
-			return fail.NewValidation(
-				fmt.Sprintf("missing cell[%d].attributes.split_by", cellIndex),
-				"timeseries cells require attributes.split_by",
-			)
-		}
 		if _, ok := cellAttrs["time"]; !ok {
 			return fail.NewValidation(
 				fmt.Sprintf("missing cell[%d].attributes.time", cellIndex),
@@ -207,34 +201,69 @@ func validateNotebookRequest(rawReq any, cellIndex, reqIndex int) error {
 			"each request must be an object",
 		)
 	}
-	q, _ := req["q"].(string)
-	if strings.TrimSpace(q) != "" {
+	qArr, hasQueries := req["queries"].([]any)
+	if hasQueries && len(qArr) > 0 {
+		for qi, rawQ := range qArr {
+			entry := mustMap(rawQ)
+			query, _ := entry["query"].(string)
+			if strings.TrimSpace(query) == "" {
+				return fail.NewValidation(
+					fmt.Sprintf("missing cell[%d].requests[%d].queries[%d].query", cellIndex, reqIndex, qi),
+					`each queries[] entry must include non-empty "query"`,
+				)
+			}
+		}
+		if formulas, ok := req["formulas"].([]any); ok {
+			for fi, rawFormula := range formulas {
+				formula := mustMap(rawFormula)
+				if formula == nil {
+					return fail.NewValidation(
+						fmt.Sprintf("invalid cell[%d].requests[%d].formulas[%d]", cellIndex, reqIndex, fi),
+						"each formulas[] entry must be an object",
+					)
+				}
+				formulaExpr, _ := formula["formula"].(string)
+				if strings.TrimSpace(formulaExpr) == "" {
+					return fail.NewValidation(
+						fmt.Sprintf("missing cell[%d].requests[%d].formulas[%d].formula", cellIndex, reqIndex, fi),
+						`each formulas[] entry must include non-empty "formula"`,
+					)
+				}
+			}
+		}
 		return nil
 	}
-	qArr, hasQueries := req["queries"].([]any)
-	if !hasQueries {
+	q, _ := req["q"].(string)
+	if strings.TrimSpace(q) == "" {
 		return fail.NewValidation(
 			fmt.Sprintf("missing cell[%d].requests[%d] query", cellIndex, reqIndex),
-			`timeseries requests require non-empty "q" or a "queries" array`,
+			`timeseries requests require non-empty "q" or a non-empty "queries" array`,
 		)
 	}
-	if len(qArr) == 0 {
+	if requestHasMetadataAliasName(req) {
 		return fail.NewValidation(
-			fmt.Sprintf("missing cell[%d].requests[%d] query", cellIndex, reqIndex),
-			`requests must include non-empty "q" or at least one queries[] entry with query`,
+			fmt.Sprintf("invalid cell[%d].requests[%d] alias", cellIndex, reqIndex),
+			`metadata[].alias_name does not produce a visible notebook legend alias; use formulas[].alias with queries[] instead`,
 		)
-	}
-	for qi, rawQ := range qArr {
-		entry := mustMap(rawQ)
-		query, _ := entry["query"].(string)
-		if strings.TrimSpace(query) == "" {
-			return fail.NewValidation(
-				fmt.Sprintf("missing cell[%d].requests[%d].queries[%d].query", cellIndex, reqIndex, qi),
-				`each queries[] entry must include non-empty "query"`,
-			)
-		}
 	}
 	return nil
+}
+
+func requestHasMetadataAliasName(req map[string]any) bool {
+	metadata, ok := req["metadata"].([]any)
+	if !ok {
+		return false
+	}
+	for _, item := range metadata {
+		entry := mustMap(item)
+		if entry == nil {
+			continue
+		}
+		if alias, _ := entry["alias_name"].(string); strings.TrimSpace(alias) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func ExtractNotebookMetricQueries(env map[string]any) ([]NotebookMetricQuery, error) {
@@ -260,6 +289,27 @@ func ExtractNotebookMetricQueries(env map[string]any) ([]NotebookMetricQuery, er
 			if req == nil {
 				continue
 			}
+			qArr, _ := req["queries"].([]any)
+			if len(qArr) > 0 {
+				for _, rawQ := range qArr {
+					entry := mustMap(rawQ)
+					query, _ := entry["query"].(string)
+					if strings.TrimSpace(query) == "" {
+						continue
+					}
+					resolved, err := resolveNotebookQuery(query, templateVars)
+					if err != nil {
+						return nil, err
+					}
+					out = append(out, NotebookMetricQuery{
+						CellIndex:    cellIndex,
+						RequestIndex: reqIndex,
+						Original:     query,
+						Resolved:     resolved,
+					})
+				}
+				continue
+			}
 			if q, _ := req["q"].(string); strings.TrimSpace(q) != "" {
 				resolved, err := resolveNotebookQuery(q, templateVars)
 				if err != nil {
@@ -272,24 +322,6 @@ func ExtractNotebookMetricQueries(env map[string]any) ([]NotebookMetricQuery, er
 					Resolved:     resolved,
 				})
 				continue
-			}
-			qArr, _ := req["queries"].([]any)
-			for _, rawQ := range qArr {
-				entry := mustMap(rawQ)
-				query, _ := entry["query"].(string)
-				if strings.TrimSpace(query) == "" {
-					continue
-				}
-				resolved, err := resolveNotebookQuery(query, templateVars)
-				if err != nil {
-					return nil, err
-				}
-				out = append(out, NotebookMetricQuery{
-					CellIndex:    cellIndex,
-					RequestIndex: reqIndex,
-					Original:     query,
-					Resolved:     resolved,
-				})
 			}
 		}
 	}
@@ -374,6 +406,9 @@ func NotebookMutationSummary(env map[string]any, site string) map[string]any {
 		"status":     status,
 		"cell_count": len(cells),
 		"cell_ids":   cellIDs,
+	}
+	if modified := notebookModifiedAt(env); modified != "" {
+		summary["modified_at"] = modified
 	}
 	if url, _ := env["url"].(string); url != "" {
 		summary["url"] = url

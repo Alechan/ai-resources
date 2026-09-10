@@ -10,6 +10,12 @@ import (
 //go:embed testdata/notebook_beaver_runbook.json
 var notebookBeaverRunbookFixture []byte
 
+//go:embed testdata/notebook_alias_after_ui.json
+var notebookAliasAfterUIFixture []byte
+
+//go:embed testdata/notebook_metadata_alias_invalid.json
+var notebookMetadataAliasInvalidFixture []byte
+
 func TestNotebookBeaverFixture_StructureValid(t *testing.T) {
 	t.Parallel()
 
@@ -57,6 +63,44 @@ func TestNotebookBeaverFixture_CreatePayloadMatchesValidate(t *testing.T) {
 	}
 	if _, err := PrepareNotebookCreatePayload(env, "", ""); err != nil {
 		t.Fatalf("PrepareNotebookCreatePayload() error = %v", err)
+	}
+}
+
+func TestNotebookAliasAfterUIFixture_StructureValid(t *testing.T) {
+	t.Parallel()
+
+	env, err := NormalizeNotebookEnvelope(notebookAliasAfterUIFixture)
+	if err != nil {
+		t.Fatalf("NormalizeNotebookEnvelope() error = %v", err)
+	}
+	if _, err := PrepareNotebookSchema(env); err != nil {
+		t.Fatalf("PrepareNotebookSchema() error = %v", err)
+	}
+	payload, err := PrepareNotebookUpdatePayload(env, "15505341", true)
+	if err != nil {
+		t.Fatalf("PrepareNotebookUpdatePayload() error = %v", err)
+	}
+	req := mustMap(mustMap(mustMap(payload["data"])["attributes"])["cells"].([]any)[3].(map[string]any)["attributes"].(map[string]any)["definition"].(map[string]any)["requests"].([]any)[0].(map[string]any))
+	formulas, ok := req["formulas"].([]any)
+	if !ok || len(formulas) == 0 {
+		t.Fatalf("formulas = %#v", req["formulas"])
+	}
+	alias, _ := mustMap(formulas[0])["alias"].(string)
+	if alias != "alias 1" {
+		t.Fatalf("alias = %q", alias)
+	}
+}
+
+func TestNotebookMetadataAliasNameFailsValidation(t *testing.T) {
+	t.Parallel()
+
+	env, err := NormalizeNotebookEnvelope(notebookMetadataAliasInvalidFixture)
+	if err != nil {
+		t.Fatalf("NormalizeNotebookEnvelope() error = %v", err)
+	}
+	_, err = PrepareNotebookSchema(env)
+	if err == nil || !strings.Contains(err.Error(), "requests[0] alias") {
+		t.Fatalf("PrepareNotebookSchema() error = %v", err)
 	}
 }
 

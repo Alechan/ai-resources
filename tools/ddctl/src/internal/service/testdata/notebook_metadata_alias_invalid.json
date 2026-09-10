@@ -1,0 +1,33 @@
+{
+  "data": {
+    "attributes": {
+      "name": "Invalid alias shape",
+      "time": {"live_span": "4h"},
+      "cells": [
+        {
+          "type": "notebook_cells",
+          "attributes": {
+            "definition": {
+              "type": "timeseries",
+              "requests": [
+                {
+                  "display_type": "line",
+                  "q": "avg:system.cpu.user{*}",
+                  "metadata": [
+                    {
+                      "expression": "query1",
+                      "alias_name": "Not a visible alias"
+                    }
+                  ]
+                }
+              ]
+            },
+            "graph_size": "m",
+            "split_by": {"keys": [], "tags": []},
+            "time": null
+          }
+        }
+      ]
+    }
+  }
+}

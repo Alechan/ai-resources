@@ -317,6 +317,8 @@ Notes:
 - Structure validation covers text cells (`markdown`, `rich_text`, `note`) and chart cells (`timeseries`, `heatmap`, `distribution`, `toplist`, `query_value`, `change`, `scatterplot`, `geomap`, `servicemap`, `trace`, `log_stream`).
 - Timeseries requests accept legacy `q` or structured `queries[]` entries; preflight extracts metric queries from both.
 - Template variables (`$name` or `$name.value`) resolve to `defaults[0]` for preflight; deprecated `default` is converted to `defaults` with a warning.
+- Visible timeseries aliases use `formulas[].alias` with `queries[]`; `metadata[].alias_name` on legacy `q` requests fails validation.
+- `notebooks get` exposes `modified_at`; `notebooks update` requires a revision guard (`--if-unmodified-since` or `attributes.modified` in the file) unless `--force` is set.
 - `--json` on get/create/update prints a concise summary by default; pass `--raw` for the full Datadog response.
 - API failures parse Datadog `errors[]` when present and always include a redacted response body in `Details:` (text) or `details` (JSON).
 - No-data in the selected window is a warning (exit 0), not a validation failure.

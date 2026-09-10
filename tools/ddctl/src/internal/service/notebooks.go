@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/datadogapi"
 	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/fail"
@@ -27,6 +28,7 @@ type NotebookMutationInput struct {
 	DryRun            bool
 	ShowDiff          bool
 	IfUnmodifiedSince string
+	Force             bool
 }
 
 type NotebookMutationResult map[string]any
@@ -123,19 +125,21 @@ func (s *NotebooksService) Update(ctx context.Context, input NotebookMutationInp
 		}
 	}
 
-	snapshot := MutationSnapshotInput{
-		IfUnmodifiedSince: input.IfUnmodifiedSince,
-		DryRun:            input.DryRun,
-		ShowDiff:          input.ShowDiff,
-	}
+	needRemote := input.DryRun || input.ShowDiff || !input.Force
 	var semantic string
-	if mutationNeedsRemoteSnapshot(snapshot) {
+	if needRemote {
 		current, err := s.Get(ctx, NotebookGetInput{ID: input.ID, IncludeMetadata: true})
 		if err != nil {
 			return nil, err
 		}
-		if err := assertModifiedAtMatches(notebookModifiedAt(current), input.IfUnmodifiedSince, "notebook"); err != nil {
-			return nil, err
+		if !input.Force {
+			expected := strings.TrimSpace(input.IfUnmodifiedSince)
+			if expected == "" {
+				expected = notebookRevisionFromEnvelope(env)
+			}
+			if err := assertNotebookRevisionMatches(notebookModifiedAt(current), expected, input.ID); err != nil {
+				return nil, err
+			}
 		}
 		semantic, jsonDiff := computeMutationDiff(MutationDiffInput{
 			Current:      map[string]any(current),

@@ -114,7 +114,8 @@ func runNotebooksUpdateCmd(ctx context.Context, svcs app.Services, cfg app.Confi
 	to := fs.String("to", "now", "metrics validation end time")
 	dryRun := fs.Bool("dry-run", false, "validate and print diff without PUT")
 	showDiff := fs.Bool("diff", false, "include semantic diff in successful update output")
-	ifUnmodified := fs.String("if-unmodified-since", "", "abort if remote modified_at does not match")
+	ifUnmodified := fs.String("if-unmodified-since", "", "abort if remote modified timestamp does not match")
+	force := fs.Bool("force", false, "overwrite remote notebook changes without a revision guard")
 	raw := fs.Bool("raw", false, "with --json, emit the full Datadog response")
 	if err := fs.Parse(parseArgs); err != nil {
 		writeError(stderr, fail.NewValidation(err.Error(), "usage: ddctl notebooks update <id> --from-file <path> --replace-all"), cfg)
@@ -138,6 +139,7 @@ func runNotebooksUpdateCmd(ctx context.Context, svcs app.Services, cfg app.Confi
 		DryRun:            *dryRun,
 		ShowDiff:          *showDiff,
 		IfUnmodifiedSince: *ifUnmodified,
+		Force:             *force,
 	}, *replaceAll)
 	if err != nil {
 		writeError(stderr, err, cfg)
@@ -257,6 +259,9 @@ func printNotebookSummaryFields(w io.Writer, summary map[string]any) {
 	}
 	if status, _ := summary["status"].(string); status != "" {
 		fmt.Fprintf(w, "Status:     %s\n", status)
+	}
+	if modified, _ := summary["modified_at"].(string); modified != "" {
+		fmt.Fprintf(w, "Modified:   %s\n", modified)
 	}
 	if count, ok := summary["cell_count"].(int); ok {
 		fmt.Fprintf(w, "Cell count: %d\n", count)

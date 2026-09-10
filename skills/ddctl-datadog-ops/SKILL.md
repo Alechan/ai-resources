@@ -211,8 +211,10 @@ Notebook update caveats:
 - Create/update run metric preflight unless `--skip-validate`.
 - `--dry-run` validates and prints diff without POST/PUT.
 - `attributes.name`, `attributes.time`, and non-empty `attributes.cells` must be present.
-- Structure validation covers text and chart cell types; timeseries accepts `q` or `queries[]`.
+- Structure validation covers text and chart cell types; timeseries accepts `q` or `queries[]`/`formulas[]`.
 - Template variables (`$name` / `$name.value`) resolve to `defaults[0]` for preflight.
+- Visible timeseries aliases use `formulas[].alias`; `metadata[].alias_name` on legacy `q` fails validation.
+- `notebooks get` exposes `modified_at`; update requires a revision guard unless `--force`.
 - `--json` returns a concise summary by default; use `--raw` for the full Datadog response.
 - `GET /api/v1/notebooks/template/{id}` may return 404; clone template in UI first, then operate on the cloned notebook ID.
 

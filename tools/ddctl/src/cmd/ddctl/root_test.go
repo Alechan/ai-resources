@@ -321,6 +321,7 @@ func TestExecute_NotebooksNestedHelp(t *testing.T) {
 				"ddctl notebooks update",
 				"--replace-all",
 				"--if-unmodified-since",
+				"--force",
 			},
 		},
 	}

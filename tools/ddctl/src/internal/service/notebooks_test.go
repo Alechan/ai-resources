@@ -134,16 +134,17 @@ func TestNotebooksUpdate_IfUnmodifiedSinceAborts(t *testing.T) {
   "data": {
     "id": "123",
     "type": "notebooks",
-    "meta": {"modified_at": "2026-09-09T02:00:00Z"},
-    "attributes": {"name": "Old", "time": {"live_span":"1w"}, "cells": [{
-      "type": "notebook_cells",
-      "attributes": {"definition": {"type": "note", "content": "x"}}
-    }]}
+    "attributes": {
+      "modified": "2026-09-09T02:00:00Z",
+      "name": "Old",
+      "time": {"live_span":"1w"},
+      "cells": [` + testNotebookMarkdownCell + `]
+    }
   }
 }`), nil
 		}
 		if req.Method == http.MethodPut {
-			t.Fatal("PUT should not run when modified_at mismatches")
+			t.Fatal("PUT should not run when revision mismatches")
 		}
 		return jsonResponse(http.StatusOK, `{}`), nil
 	}))
@@ -161,8 +162,84 @@ func TestNotebooksUpdate_IfUnmodifiedSinceAborts(t *testing.T) {
 		SkipValidate:      true,
 		IfUnmodifiedSince: "2026-09-09T01:00:00Z",
 	}, true)
-	if err == nil || !strings.Contains(err.Error(), "modified_at") {
+	if err == nil || !strings.Contains(err.Error(), "changed since last get") {
 		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestNotebooksUpdate_MissingRevisionGuardFails(t *testing.T) {
+	t.Parallel()
+
+	dd := testDashClient(dashRoundTripper(func(req *http.Request) (*http.Response, error) {
+		if req.Method == http.MethodGet && strings.Contains(req.URL.Path, "/api/v1/notebooks/123") {
+			return jsonResponse(http.StatusOK, `{
+  "data": {
+    "id": "123",
+    "type": "notebooks",
+    "attributes": {
+      "modified": "2026-09-09T01:00:00Z",
+      "name": "Old",
+      "time": {"live_span":"1w"},
+      "cells": [` + testNotebookMarkdownCell + `]
+    }
+  }
+}`), nil
+		}
+		if req.Method == http.MethodPut {
+			t.Fatal("PUT should not run without revision guard")
+		}
+		return jsonResponse(http.StatusOK, `{}`), nil
+	}))
+	svc := NewNotebooksService(dd, NewMetricsQueryService(dd), "datadoghq.com")
+	file := writeDashboardFile(t, `{
+  "attributes": {
+    "name": "Notebook A",
+    "time": {"live_span":"1w"},
+    "cells": [` + testNotebookMarkdownCell + `]
+  }
+}`)
+	_, err := svc.Update(context.Background(), NotebookMutationInput{
+		ID:           "123",
+		FilePath:     file,
+		SkipValidate: true,
+	}, true)
+	if err == nil || !strings.Contains(err.Error(), "revision guard") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestNotebooksUpdate_ForceSkipsRevisionGuard(t *testing.T) {
+	t.Parallel()
+
+	var put bool
+	dd := testDashClient(dashRoundTripper(func(req *http.Request) (*http.Response, error) {
+		if req.Method == http.MethodGet {
+			t.Fatal("GET should not run when --force skips concurrency guard")
+		}
+		if req.Method == http.MethodPut {
+			put = true
+		}
+		return jsonResponse(http.StatusOK, `{"data":{"id":"123","type":"notebooks","attributes":{"name":"Notebook A","cells":[]}}}`), nil
+	}))
+	svc := NewNotebooksService(dd, NewMetricsQueryService(dd), "datadoghq.com")
+	file := writeDashboardFile(t, `{
+  "attributes": {
+    "name": "Notebook A",
+    "time": {"live_span":"1w"},
+    "cells": [` + testNotebookMarkdownCell + `]
+  }
+}`)
+	_, err := svc.Update(context.Background(), NotebookMutationInput{
+		ID:           "123",
+		FilePath:     file,
+		SkipValidate: true,
+		Force:        true,
+	}, true)
+	if err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	if !put {
+		t.Fatal("expected PUT when --force is set")
 	}
 }
 
@@ -176,10 +253,12 @@ func TestNotebooksUpdate_DryRunNoPut(t *testing.T) {
   "data": {
     "id": "123",
     "type": "notebooks",
-    "attributes": {"name": "Old", "time": {"live_span":"1w"}, "cells": [{
-      "type": "notebook_cells",
-      "attributes": {"definition": {"type": "note", "content": "x"}}
-    }]}
+    "attributes": {
+      "modified": "2026-09-09T01:00:00Z",
+      "name": "Old",
+      "time": {"live_span":"1w"},
+      "cells": [` + testNotebookMarkdownCell + `]
+    }
   }
 }`), nil
 		}
@@ -191,6 +270,7 @@ func TestNotebooksUpdate_DryRunNoPut(t *testing.T) {
 	svc := NewNotebooksService(dd, NewMetricsQueryService(dd), "datadoghq.com")
 	file := writeDashboardFile(t, `{
   "attributes": {
+    "modified": "2026-09-09T01:00:00Z",
     "name": "Notebook B",
     "time": {"live_span":"1w"},
     "cells": [` + testNotebookMarkdownCell + `]

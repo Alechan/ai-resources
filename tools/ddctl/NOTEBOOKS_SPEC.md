@@ -95,6 +95,17 @@ Online query preflight (best effort):
 HTTP error responses parse Datadog `errors[]` (or top-level `error`) into the ddctl error envelope.
 Text mode prints parsed `Server error:` lines and always includes a redacted `Details:` response body when Datadog returned one (including non-JSON and empty-body cases).
 
+## Alias preservation
+
+Visible timeseries legend aliases are stored in `formulas[].alias` with `queries[]` and `response_format`.
+Legacy `metadata[].alias_name` on `q` requests is rejected during validation.
+
+## Concurrency guard
+
+`notebooks get` exposes `modified_at` (from `attributes.modified`).
+`notebooks update` compares the remote revision against `--if-unmodified-since` or `attributes.modified` from the file unless `--force` is set.
+Stale updates fail with guidance to re-get and merge; `--force` is separate from `--replace-all`.
+
 ## Known caveats captured by the CLI docs
 
 1. Notebook `PUT` behaves as full replacement.

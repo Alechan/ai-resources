@@ -77,8 +77,12 @@ Flags:
   --to <time>                        Preflight window end (default: now)
   --dry-run                          Validate and print diff without PUT
   --diff                             Include semantic diff on successful update
-  --if-unmodified-since <rfc3339>    Abort if remote modified_at does not match
+  --if-unmodified-since <rfc3339>    Abort if remote modified timestamp does not match
+  --force                            Overwrite remote changes without a revision guard
   --raw                              With --json, emit the full Datadog response (default: concise summary)
+
+Update requires a revision guard unless --force is set. Pass --if-unmodified-since from
+notebooks get output or include attributes.modified from a get export in --from-file.
 
 Mutates DataDog. PUT is full replacement; --replace-all is required.
 `

@@ -180,11 +180,46 @@ func notebookModifiedAt(env map[string]any) string {
 		}
 	}
 	if attrs := mustMap(data["attributes"]); attrs != nil {
+		if v, ok := attrs["modified"]; ok && v != nil {
+			return fmt.Sprint(v)
+		}
 		if v, ok := attrs["modified_at"]; ok && v != nil {
 			return fmt.Sprint(v)
 		}
 	}
 	return ""
+}
+
+func notebookRevisionFromEnvelope(env map[string]any) string {
+	return notebookModifiedAt(env)
+}
+
+func assertNotebookRevisionMatches(got, expected, notebookID string) error {
+	expected = strings.TrimSpace(expected)
+	if expected == "" {
+		return fail.NewValidation(
+			"missing notebook revision guard",
+			"pass --if-unmodified-since from notebooks get, include attributes.modified from a get export, or --force to overwrite remote changes",
+		)
+	}
+	got = strings.TrimSpace(got)
+	if got == "" {
+		return fail.NewValidation(
+			"notebook has no modified timestamp",
+			"ensure notebooks get uses --include-metadata or pass --force to skip the concurrency guard",
+		)
+	}
+	if modifiedAtMatches(got, expected) {
+		return nil
+	}
+	action := "run notebooks get and merge your edits before update"
+	if notebookID != "" {
+		action = fmt.Sprintf("run notebooks get %s and merge your edits before update, or pass --force to overwrite remote changes", notebookID)
+	}
+	return fail.NewValidation(
+		"notebook changed since last get",
+		fmt.Sprintf("remote modified is %s; %s", got, action),
+	)
 }
 
 func notebookName(env map[string]any) string {

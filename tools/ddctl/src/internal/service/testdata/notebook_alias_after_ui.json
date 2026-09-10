@@ -1,0 +1,366 @@
+{
+  "data": {
+    "attributes": {
+      "cells": [
+        {
+          "attributes": {
+            "definition": {
+              "text": "# Alias Round Trip Runbook\n\nOperational runbook for Beaver NPS and CSAT monitoring.\n\n[Beaver \u2014 NPS & CSAT Monitoring](https://app.datadoghq.com/dashboard/yfh-kkv-47j)\n\nEmpty enhancer runs are healthy. Heartbeat monitors are independent of customer submission volume.",
+              "type": "markdown"
+            }
+          },
+          "id": "hta17cko",
+          "type": "notebook_cells"
+        },
+        {
+          "attributes": {
+            "definition": {
+              "text": "## Monitor: CSAT/NPS heartbeat missing\n\n### What this alert means\n\nThe NPS and CSAT enhancer CronJobs are each expected to run every five minutes. A missing heartbeat means the relevant job may be unhealthy (independent of organic submissions from users).",
+              "type": "markdown"
+            }
+          },
+          "id": "vl84bf52",
+          "type": "notebook_cells"
+        },
+        {
+          "attributes": {
+            "definition": {
+              "text": "### CSAT signals\n\nCronJob: `beaver-survey-enhancer`\n\nHeartbeat: `beaver.survey.enhancer_run.count{survey_type:csat}`",
+              "type": "markdown"
+            }
+          },
+          "id": "blzk1fp0",
+          "type": "notebook_cells"
+        },
+        {
+          "attributes": {
+            "definition": {
+              "legend_columns": [
+                "avg",
+                "min",
+                "max",
+                "value",
+                "sum"
+              ],
+              "legend_layout": "vertical",
+              "requests": [
+                {
+                  "display_type": "bars",
+                  "formulas": [
+                    {
+                      "alias": "alias 1",
+                      "formula": "query1"
+                    }
+                  ],
+                  "queries": [
+                    {
+                      "data_source": "metrics",
+                      "name": "query1",
+                      "query": "sum:beaver.survey.enhancer_run.count{kube_namespace:$environment.value,survey_type:csat} by {result}.as_count()"
+                    }
+                  ],
+                  "response_format": "timeseries",
+                  "style": {
+                    "line_type": "solid",
+                    "line_width": "normal",
+                    "palette": "dog_classic"
+                  }
+                },
+                {
+                  "display_type": "line",
+                  "formulas": [
+                    {
+                      "alias": "alias 2",
+                      "formula": "query1"
+                    }
+                  ],
+                  "queries": [
+                    {
+                      "data_source": "metrics",
+                      "name": "query1",
+                      "query": "sum:beaver.survey.enhancement.run_count{kube_namespace:$environment.value}.as_count()"
+                    }
+                  ],
+                  "response_format": "timeseries",
+                  "style": {
+                    "line_type": "dashed",
+                    "line_width": "normal",
+                    "palette": "cool"
+                  }
+                },
+                {
+                  "display_type": "line",
+                  "formulas": [
+                    {
+                      "alias": "alias 3",
+                      "formula": "query1"
+                    }
+                  ],
+                  "queries": [
+                    {
+                      "data_source": "metrics",
+                      "name": "query1",
+                      "query": "max:kubernetes_state.job.succeeded{kube_namespace:$environment.value,kube_cronjob:beaver-survey-enhancer}"
+                    }
+                  ],
+                  "response_format": "timeseries",
+                  "style": {
+                    "line_type": "solid",
+                    "line_width": "normal",
+                    "palette": "green"
+                  }
+                },
+                {
+                  "display_type": "line",
+                  "formulas": [
+                    {
+                      "alias": "alias 4",
+                      "formula": "query1"
+                    }
+                  ],
+                  "queries": [
+                    {
+                      "data_source": "metrics",
+                      "name": "query1",
+                      "query": "max:kubernetes_state.job.failed{kube_namespace:$environment.value,kube_cronjob:beaver-survey-enhancer}"
+                    }
+                  ],
+                  "response_format": "timeseries",
+                  "style": {
+                    "line_type": "solid",
+                    "line_width": "normal",
+                    "palette": "warm"
+                  }
+                }
+              ],
+              "show_legend": true,
+              "title": "CSAT heartbeat signals",
+              "type": "timeseries",
+              "yaxis": {
+                "include_zero": true,
+                "max": "auto",
+                "min": "0",
+                "scale": "linear"
+              }
+            },
+            "graph_size": "m",
+            "time": null
+          },
+          "id": "ooguyn3p",
+          "type": "notebook_cells"
+        },
+        {
+          "attributes": {
+            "definition": {
+              "text": "### NPS signals\n\nCronJob: `beaver-nps`\n\nHeartbeat: `beaver.survey.enhancer_run.count{survey_type:nps}`",
+              "type": "markdown"
+            }
+          },
+          "id": "1p5ec83n",
+          "type": "notebook_cells"
+        },
+        {
+          "attributes": {
+            "definition": {
+              "requests": [
+                {
+                  "display_type": "bars",
+                  "queries": [
+                    {
+                      "data_source": "metrics",
+                      "name": "query1",
+                      "query": "sum:beaver.survey.enhancer_run.count{kube_namespace:$environment.value,survey_type:nps} by {result}.as_count()"
+                    }
+                  ],
+                  "response_format": "timeseries",
+                  "style": {
+                    "line_type": "solid",
+                    "line_width": "normal",
+                    "palette": "dog_classic"
+                  }
+                }
+              ],
+              "show_legend": true,
+              "title": "NPS enhancer completed runs by result",
+              "type": "timeseries",
+              "yaxis": {
+                "include_zero": true,
+                "max": "auto",
+                "min": "0",
+                "scale": "linear"
+              }
+            },
+            "graph_size": "m",
+            "split_by": {
+              "keys": [],
+              "tags": []
+            },
+            "time": null
+          },
+          "id": "71ycyg0e",
+          "type": "notebook_cells"
+        },
+        {
+          "attributes": {
+            "definition": {
+              "requests": [
+                {
+                  "display_type": "line",
+                  "queries": [
+                    {
+                      "data_source": "metrics",
+                      "name": "query1",
+                      "query": "max:kubernetes_state.job.succeeded{kube_namespace:$environment.value,kube_cronjob:beaver-nps}"
+                    }
+                  ],
+                  "response_format": "timeseries",
+                  "style": {
+                    "line_type": "solid",
+                    "line_width": "normal",
+                    "palette": "green"
+                  }
+                },
+                {
+                  "display_type": "line",
+                  "queries": [
+                    {
+                      "data_source": "metrics",
+                      "name": "query1",
+                      "query": "max:kubernetes_state.job.failed{kube_namespace:$environment.value,kube_cronjob:beaver-nps}"
+                    }
+                  ],
+                  "response_format": "timeseries",
+                  "style": {
+                    "line_type": "solid",
+                    "line_width": "normal",
+                    "palette": "warm"
+                  }
+                }
+              ],
+              "show_legend": true,
+              "title": "NPS enhancer Kubernetes Job status",
+              "type": "timeseries",
+              "yaxis": {
+                "include_zero": true,
+                "max": "auto",
+                "min": "0",
+                "scale": "linear"
+              }
+            },
+            "graph_size": "m",
+            "split_by": {
+              "keys": [],
+              "tags": []
+            },
+            "time": null
+          },
+          "id": "c8fr3vde",
+          "type": "notebook_cells"
+        },
+        {
+          "attributes": {
+            "definition": {
+              "requests": [
+                {
+                  "display_type": "bars",
+                  "queries": [
+                    {
+                      "data_source": "metrics",
+                      "name": "query1",
+                      "query": "sum:beaver.nps.enhancement.run_count{kube_namespace:$environment.value}.as_count()"
+                    }
+                  ],
+                  "response_format": "timeseries",
+                  "style": {
+                    "line_type": "solid",
+                    "line_width": "normal",
+                    "palette": "purple"
+                  }
+                }
+              ],
+              "show_legend": true,
+              "title": "Legacy NPS heartbeat \u2014 remove after new metric validation",
+              "type": "timeseries",
+              "yaxis": {
+                "include_zero": true,
+                "max": "auto",
+                "min": "0",
+                "scale": "linear"
+              }
+            },
+            "graph_size": "m",
+            "split_by": {
+              "keys": [],
+              "tags": []
+            },
+            "time": null
+          },
+          "id": "jrs56u41",
+          "type": "notebook_cells"
+        },
+        {
+          "attributes": {
+            "definition": {
+              "text": "### Shared investigation\n\n1. Identify the affected survey from the monitor: CSAT uses `beaver-survey-enhancer`; NPS uses `beaver-nps`.\n2. Confirm the affected CronJob exists, is not suspended, and is still scheduled every five minutes.\n3. Check `lastScheduleTime` and whether recent Jobs succeeded, failed, or remained active. If the schedule was intentionally reduced, revise the heartbeat monitor windows.\n4. Inspect Job and pod events for pending or unschedulable pods, cluster capacity, quotas, image pulls, missing secrets, permissions, crashes, and missed starting deadlines.\n5. If the process started, inspect PostgreSQL connectivity, fetching unenhanced submissions, Vertex calls, persistence, and execution duration.\n6. If Jobs succeeded but the heartbeat is absent, verify the deployed Beaver version, StatsD configuration, Datadog Agent connectivity, metric name, `kube_namespace`, and `survey_type` tags.\n7. During migration, compare the new heartbeat with the matching legacy counter.\n8. Do not investigate missing customer submissions as the cause. A healthy job with no work emits `result:empty`.",
+              "type": "markdown"
+            }
+          },
+          "id": "3mpudflu",
+          "type": "notebook_cells"
+        },
+        {
+          "attributes": {
+            "definition": {
+              "text": "### Signal interpretation\n\n| Kubernetes Jobs | Enhancer heartbeat | Likely meaning |\n|---|---|---|\n| Missing | Missing | CronJob scheduling or Kubernetes control-plane problem |\n| Failed | Missing | Job startup or execution failure |\n| Successful | Missing | Metric emission, Datadog Agent, or deployed-version problem |\n| Successful | Present | Healthy or recovered |",
+              "type": "markdown"
+            }
+          },
+          "id": "99m34skd",
+          "type": "notebook_cells"
+        },
+        {
+          "attributes": {
+            "definition": {
+              "text": "### Recovery criteria\n\nRecovery requires all of the following for the affected survey:\n\n1. A new Job completes successfully.\n2. A new `beaver.survey.enhancer_run.count` point appears with the expected `survey_type`.\n3. The result may be `empty` or `success`.\n4. The heartbeat monitor returns to `OK`.\n5. The next scheduled execution also completes normally.\n\n### Migration note\n\nRemove the legacy heartbeat cell after the new metric has been present in production for at least one week, agrees with Kubernetes Job success for both CronJobs, and all heartbeat monitors have been validated.",
+              "type": "markdown"
+            }
+          },
+          "id": "qd5mj9v1",
+          "type": "notebook_cells"
+        }
+      ],
+      "created": "2026-09-10T12:54:27.071617+00:00",
+      "deleted": null,
+      "dropdown_templates": [],
+      "metadata": {
+        "is_favorite": false,
+        "is_template": false,
+        "take_snapshots": false,
+        "type": null
+      },
+      "modified": "2026-09-10T13:16:00.574689+00:00",
+      "name": "Alias Round Trip Runbook",
+      "schema_version": 0,
+      "status": "published",
+      "tags": [],
+      "template_variables": [
+        {
+          "available_values": [
+            "production",
+            "acceptance"
+          ],
+          "name": "environment",
+          "prefix": "kube_namespace",
+          "defaults": [
+            "production"
+          ]
+        }
+      ],
+      "time": {
+        "live_span": "4h"
+      }
+    },
+    "id": 15505341,
+    "type": "notebooks"
+  }
+}
