@@ -1,0 +1,63 @@
+package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"io"
+
+	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/app"
+	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/auth"
+	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/fail"
+	"github.com/Alechan/ai-resources/tools/ddctl/src/internal/service"
+)
+
+func runDoctorCmd(ctx context.Context, svcs app.Services, cfg app.Config, args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	if err := fs.Parse(args); err != nil {
+		err = fail.NewValidation(err.Error(), "usage: ddctl doctor")
+		writeError(stderr, err, cfg)
+		return fail.ExitCode(err)
+	}
+
+	if err := auth.RequireDarwin(); err != nil {
+		writeError(stderr, err, cfg)
+		return fail.ExitCode(err)
+	}
+
+	report, err := svcs.Doctor.Run(ctx)
+	if err != nil {
+		writeError(stderr, err, cfg)
+		return fail.ExitCode(err)
+	}
+
+	if cfg.JSON {
+		if err := svcs.Output.JSON(stdout, report); err != nil {
+			writeError(stderr, fail.NewAPI(err.Error(), "unable to encode doctor report", ""), cfg)
+			return fail.CodeAPI
+		}
+		return doctorExitCode(report)
+	}
+
+	fmt.Fprintf(stdout, "credential store: %s\n", report.CredentialStore)
+	fmt.Fprintf(stdout, "credentials found: %t\n", report.CredentialsFound)
+	fmt.Fprintf(stdout, "session cookies: %d\n", report.SessionCookies)
+	fmt.Fprintf(stdout, "datadog reachable: %t\n", report.DataDogReachable)
+	fmt.Fprintf(stdout, "auth query valid: %t\n", report.AuthQueryValid)
+	if report.Note != "" {
+		fmt.Fprintf(stdout, "note: %s\n", report.Note)
+	}
+
+	return doctorExitCode(report)
+}
+
+func doctorExitCode(report service.DoctorReport) int {
+	if !report.DataDogReachable {
+		return fail.CodeNetwork
+	}
+	if !report.CredentialsFound || report.SessionCookies == 0 || !report.AuthQueryValid {
+		return fail.CodeAuth
+	}
+	return fail.CodeOK
+}

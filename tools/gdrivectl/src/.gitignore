@@ -1,0 +1,16 @@
+# IDE
+.idea/
+.vscode/
+
+# macOS
+.DS_Store
+
+# Go
+bin/
+*.test
+*.out
+coverage.out
+
+# Environment
+.env
+.env.*

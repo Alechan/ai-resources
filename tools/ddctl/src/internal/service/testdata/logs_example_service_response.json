@@ -1,0 +1,47 @@
+{
+  "hitCount": 2,
+  "result": {
+    "events": [
+      {
+        "id": "evt-example-response",
+        "columns": ["info", "2026-09-10T13:20:02.820Z", "i-host", "example-api", null],
+        "event": {
+          "status": "info",
+          "timestamp": "2026-09-10T13:20:02.820Z",
+          "host": "i-host",
+          "service": "example-api",
+          "custom": {
+            "msg": "upstream response payload",
+            "body": "{\"message\":\"Create resource failed: already exists\"}",
+            "method": "POST",
+            "status_code": 400,
+            "url": "https://api.example.com/v1/resources",
+            "group": "example-api-client"
+          }
+        }
+      },
+      {
+        "id": "evt-example-request",
+        "columns": ["error", "2026-09-10T13:20:02.820Z", "i-host", "example-api", null],
+        "event": {
+          "status": "error",
+          "timestamp": "2026-09-10T13:20:02.820Z",
+          "host": "i-host",
+          "service": "example-api",
+          "custom": {
+            "msg": "failed to process request",
+            "user_id": "user-123",
+            "error": "upstream api error: Bad Request (status 400)",
+            "payload": {
+              "RequestID": "req-12345",
+              "UserID": "user-123",
+              "Status": "rejected",
+              "Attempt": 1
+            }
+          }
+        }
+      }
+    ],
+    "paging": {"after": ""}
+  }
+}

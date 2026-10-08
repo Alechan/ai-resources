@@ -1,0 +1,366 @@
+{
+  "data": {
+    "attributes": {
+      "cells": [
+        {
+          "attributes": {
+            "definition": {
+              "text": "# Alias Round Trip Runbook\n\nOperational runbook for scheduled worker and batch job monitoring.\n\nExample workload monitoring dashboard.\n\nEmpty worker runs are healthy. Heartbeat monitors are independent of incoming workload volume.",
+              "type": "markdown"
+            }
+          },
+          "id": "hta17cko",
+          "type": "notebook_cells"
+        },
+        {
+          "attributes": {
+            "definition": {
+              "text": "## Monitor: workload heartbeat missing\n\n### What this alert means\n\nThe scheduled worker CronJobs are expected to run every five minutes. A missing heartbeat means a job may be unhealthy, independent of incoming workload volume.",
+              "type": "markdown"
+            }
+          },
+          "id": "vl84bf52",
+          "type": "notebook_cells"
+        },
+        {
+          "attributes": {
+            "definition": {
+              "text": "### Scheduled worker signals\n\nCronJob: `example-worker`\n\nHeartbeat: `example_worker.job.heartbeat{workload:scheduled}`",
+              "type": "markdown"
+            }
+          },
+          "id": "blzk1fp0",
+          "type": "notebook_cells"
+        },
+        {
+          "attributes": {
+            "definition": {
+              "legend_columns": [
+                "avg",
+                "min",
+                "max",
+                "value",
+                "sum"
+              ],
+              "legend_layout": "vertical",
+              "requests": [
+                {
+                  "display_type": "bars",
+                  "formulas": [
+                    {
+                      "alias": "alias 1",
+                      "formula": "query1"
+                    }
+                  ],
+                  "queries": [
+                    {
+                      "data_source": "metrics",
+                      "name": "query1",
+                      "query": "sum:example_worker.job.heartbeat{kube_namespace:$environment.value,workload:scheduled} by {result}.as_count()"
+                    }
+                  ],
+                  "response_format": "timeseries",
+                  "style": {
+                    "line_type": "solid",
+                    "line_width": "normal",
+                    "palette": "dog_classic"
+                  }
+                },
+                {
+                  "display_type": "line",
+                  "formulas": [
+                    {
+                      "alias": "alias 2",
+                      "formula": "query1"
+                    }
+                  ],
+                  "queries": [
+                    {
+                      "data_source": "metrics",
+                      "name": "query1",
+                      "query": "sum:example_worker.job.legacy_heartbeat{kube_namespace:$environment.value}.as_count()"
+                    }
+                  ],
+                  "response_format": "timeseries",
+                  "style": {
+                    "line_type": "dashed",
+                    "line_width": "normal",
+                    "palette": "cool"
+                  }
+                },
+                {
+                  "display_type": "line",
+                  "formulas": [
+                    {
+                      "alias": "alias 3",
+                      "formula": "query1"
+                    }
+                  ],
+                  "queries": [
+                    {
+                      "data_source": "metrics",
+                      "name": "query1",
+                      "query": "max:kubernetes_state.job.succeeded{kube_namespace:$environment.value,kube_cronjob:example-worker}"
+                    }
+                  ],
+                  "response_format": "timeseries",
+                  "style": {
+                    "line_type": "solid",
+                    "line_width": "normal",
+                    "palette": "green"
+                  }
+                },
+                {
+                  "display_type": "line",
+                  "formulas": [
+                    {
+                      "alias": "alias 4",
+                      "formula": "query1"
+                    }
+                  ],
+                  "queries": [
+                    {
+                      "data_source": "metrics",
+                      "name": "query1",
+                      "query": "max:kubernetes_state.job.failed{kube_namespace:$environment.value,kube_cronjob:example-worker}"
+                    }
+                  ],
+                  "response_format": "timeseries",
+                  "style": {
+                    "line_type": "solid",
+                    "line_width": "normal",
+                    "palette": "warm"
+                  }
+                }
+              ],
+              "show_legend": true,
+              "title": "Scheduled worker heartbeat signals",
+              "type": "timeseries",
+              "yaxis": {
+                "include_zero": true,
+                "max": "auto",
+                "min": "0",
+                "scale": "linear"
+              }
+            },
+            "graph_size": "m",
+            "time": null
+          },
+          "id": "ooguyn3p",
+          "type": "notebook_cells"
+        },
+        {
+          "attributes": {
+            "definition": {
+              "text": "### Batch job signals\n\nCronJob: `example-batch-job`\n\nHeartbeat: `example_worker.job.heartbeat{workload:batch}`",
+              "type": "markdown"
+            }
+          },
+          "id": "1p5ec83n",
+          "type": "notebook_cells"
+        },
+        {
+          "attributes": {
+            "definition": {
+              "requests": [
+                {
+                  "display_type": "bars",
+                  "queries": [
+                    {
+                      "data_source": "metrics",
+                      "name": "query1",
+                      "query": "sum:example_worker.job.heartbeat{kube_namespace:$environment.value,workload:batch} by {result}.as_count()"
+                    }
+                  ],
+                  "response_format": "timeseries",
+                  "style": {
+                    "line_type": "solid",
+                    "line_width": "normal",
+                    "palette": "dog_classic"
+                  }
+                }
+              ],
+              "show_legend": true,
+              "title": "Batch job completed runs by result",
+              "type": "timeseries",
+              "yaxis": {
+                "include_zero": true,
+                "max": "auto",
+                "min": "0",
+                "scale": "linear"
+              }
+            },
+            "graph_size": "m",
+            "split_by": {
+              "keys": [],
+              "tags": []
+            },
+            "time": null
+          },
+          "id": "71ycyg0e",
+          "type": "notebook_cells"
+        },
+        {
+          "attributes": {
+            "definition": {
+              "requests": [
+                {
+                  "display_type": "line",
+                  "queries": [
+                    {
+                      "data_source": "metrics",
+                      "name": "query1",
+                      "query": "max:kubernetes_state.job.succeeded{kube_namespace:$environment.value,kube_cronjob:example-batch-job}"
+                    }
+                  ],
+                  "response_format": "timeseries",
+                  "style": {
+                    "line_type": "solid",
+                    "line_width": "normal",
+                    "palette": "green"
+                  }
+                },
+                {
+                  "display_type": "line",
+                  "queries": [
+                    {
+                      "data_source": "metrics",
+                      "name": "query1",
+                      "query": "max:kubernetes_state.job.failed{kube_namespace:$environment.value,kube_cronjob:example-batch-job}"
+                    }
+                  ],
+                  "response_format": "timeseries",
+                  "style": {
+                    "line_type": "solid",
+                    "line_width": "normal",
+                    "palette": "warm"
+                  }
+                }
+              ],
+              "show_legend": true,
+              "title": "Batch job Kubernetes status",
+              "type": "timeseries",
+              "yaxis": {
+                "include_zero": true,
+                "max": "auto",
+                "min": "0",
+                "scale": "linear"
+              }
+            },
+            "graph_size": "m",
+            "split_by": {
+              "keys": [],
+              "tags": []
+            },
+            "time": null
+          },
+          "id": "c8fr3vde",
+          "type": "notebook_cells"
+        },
+        {
+          "attributes": {
+            "definition": {
+              "requests": [
+                {
+                  "display_type": "bars",
+                  "queries": [
+                    {
+                      "data_source": "metrics",
+                      "name": "query1",
+                      "query": "sum:example_worker.batch.legacy_heartbeat{kube_namespace:$environment.value}.as_count()"
+                    }
+                  ],
+                  "response_format": "timeseries",
+                  "style": {
+                    "line_type": "solid",
+                    "line_width": "normal",
+                    "palette": "purple"
+                  }
+                }
+              ],
+              "show_legend": true,
+              "title": "Legacy batch job heartbeat \u2014 remove after new metric validation",
+              "type": "timeseries",
+              "yaxis": {
+                "include_zero": true,
+                "max": "auto",
+                "min": "0",
+                "scale": "linear"
+              }
+            },
+            "graph_size": "m",
+            "split_by": {
+              "keys": [],
+              "tags": []
+            },
+            "time": null
+          },
+          "id": "jrs56u41",
+          "type": "notebook_cells"
+        },
+        {
+          "attributes": {
+            "definition": {
+              "text": "### Shared investigation\n\n1. Identify the affected workload and its expected CronJob.\n2. Confirm the CronJob exists, is not suspended, and is still scheduled as expected.\n3. Check `lastScheduleTime` and whether recent Jobs succeeded, failed, or remained active. If the schedule changed, revise the heartbeat monitor windows.\n4. Inspect Job and pod events for scheduling, capacity, quotas, image pulls, secrets, permissions, crashes, and missed starting deadlines.\n5. If the process started, inspect dependency connectivity, request processing, persistence, and execution duration.\n6. If Jobs succeeded but the heartbeat is absent, verify the deployed worker version, metrics configuration, Datadog Agent connectivity, metric name, and `kube_namespace`/workload tags.\n7. During migration, compare the new heartbeat with the matching legacy counter.\n8. A healthy job with no work emits `result:empty`.",
+              "type": "markdown"
+            }
+          },
+          "id": "3mpudflu",
+          "type": "notebook_cells"
+        },
+        {
+          "attributes": {
+            "definition": {
+              "text": "### Signal interpretation\n\n| Kubernetes Jobs | Worker heartbeat | Likely meaning |\n|---|---|---|\n| Missing | Missing | CronJob scheduling or Kubernetes control-plane problem |\n| Failed | Missing | Job startup or execution failure |\n| Successful | Missing | Metric emission, Datadog Agent, or deployed-version problem |\n| Successful | Present | Healthy or recovered |",
+              "type": "markdown"
+            }
+          },
+          "id": "99m34skd",
+          "type": "notebook_cells"
+        },
+        {
+          "attributes": {
+            "definition": {
+              "text": "### Recovery criteria\n\nRecovery requires all of the following for the affected workload:\n\n1. A new Job completes successfully.\n2. A new `example_worker.job.heartbeat` point appears with the expected workload tag.\n3. The result may be `empty` or `success`.\n4. The heartbeat monitor returns to `OK`.\n5. The next scheduled execution also completes normally.\n\n### Migration note\n\nRemove the legacy heartbeat cell after the new metric has been present long enough to agree with Kubernetes Job success and all heartbeat monitors have been validated.",
+              "type": "markdown"
+            }
+          },
+          "id": "qd5mj9v1",
+          "type": "notebook_cells"
+        }
+      ],
+      "created": "2026-01-01T00:00:00+00:00",
+      "deleted": null,
+      "dropdown_templates": [],
+      "metadata": {
+        "is_favorite": false,
+        "is_template": false,
+        "take_snapshots": false,
+        "type": null
+      },
+      "modified": "2026-01-01T00:00:00+00:00",
+      "name": "Alias Round Trip Runbook",
+      "schema_version": 0,
+      "status": "published",
+      "tags": [],
+      "template_variables": [
+        {
+          "available_values": [
+            "production",
+            "acceptance"
+          ],
+          "name": "environment",
+          "prefix": "kube_namespace",
+          "defaults": [
+            "production"
+          ]
+        }
+      ],
+      "time": {
+        "live_span": "4h"
+      }
+    },
+    "id": 12345678,
+    "type": "notebooks"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "documentId": "doc-1",
+  "title": "Spec",
+  "tabs": [
+    {
+      "tabProperties": {
+        "tabId": "t1",
+        "title": "Overview",
+        "index": 0,
+        "nestingLevel": 0
+      },
+      "childTabs": [
+        {
+          "tabProperties": {
+            "tabId": "t1-1",
+            "title": "Details",
+            "index": 1,
+            "parentTabId": "t1",
+            "nestingLevel": 1
+          },
+          "childTabs": []
+        }
+      ]
+    }
+  ]
+}

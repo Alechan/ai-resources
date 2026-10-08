@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# commit-msg — remove Co-authored-by trailers before a commit is created.
+#
+# Cursor and other tools may append co-author lines to agent-created commits.
+# This hook keeps commit authorship limited to the configured git user.
+
+set -euo pipefail
+
+msg_file="$1"
+tmp="$(mktemp)"
+
+grep -viE '^[[:space:]]*co-authored-by:' "$msg_file" > "${tmp}" || true
+mv "${tmp}" "${msg_file}"
+
+exit 0

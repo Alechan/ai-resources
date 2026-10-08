@@ -1,0 +1,131 @@
+{
+  "data": {
+    "attributes": {
+      "cells": [
+        {
+          "attributes": {
+            "definition": {
+              "text": "# Operations runbook",
+              "type": "markdown"
+            }
+          },
+          "id": "cell-md-1",
+          "type": "notebook_cells"
+        },
+        {
+          "attributes": {
+            "definition": {
+              "text": "## Worker heartbeat missing",
+              "type": "markdown"
+            }
+          },
+          "id": "cell-md-2",
+          "type": "notebook_cells"
+        },
+        {
+          "attributes": {
+            "definition": {
+              "requests": [
+                {
+                  "display_type": "bars",
+                  "q": "sum:example_worker.job.heartbeat{kube_namespace:$environment.value,workload:scheduled} by {result}.as_count()"
+                }
+              ],
+              "title": "Worker completed runs",
+              "type": "timeseries"
+            },
+            "graph_size": "m",
+            "split_by": {"keys": [], "tags": []},
+            "time": null
+          },
+          "id": "cell-ts-1",
+          "type": "notebook_cells"
+        },
+        {
+          "attributes": {
+            "definition": {
+              "requests": [
+                {
+                  "display_type": "line",
+                  "q": "max:kubernetes_state.job.succeeded{kube_namespace:$environment.value,kube_cronjob:example-worker}"
+                },
+                {
+                  "display_type": "line",
+                  "q": "max:kubernetes_state.job.failed{kube_namespace:$environment.value,kube_cronjob:example-worker}"
+                }
+              ],
+              "title": "Kubernetes Job status",
+              "type": "timeseries"
+            },
+            "graph_size": "m",
+            "split_by": {"keys": [], "tags": []},
+            "time": null
+          },
+          "id": "cell-ts-2",
+          "type": "notebook_cells"
+        },
+        {
+          "attributes": {
+            "definition": {
+              "requests": [
+                {
+                  "display_type": "bars",
+                  "q": "sum:example_worker.job.legacy_heartbeat{kube_namespace:$environment.value}.as_count()"
+                }
+              ],
+              "title": "Legacy worker heartbeat",
+              "type": "timeseries"
+            },
+            "graph_size": "m",
+            "split_by": {"keys": [], "tags": []},
+            "time": null
+          },
+          "id": "cell-ts-3",
+          "type": "notebook_cells"
+        },
+        {
+          "attributes": {
+            "definition": {
+              "text": "### Investigation steps",
+              "type": "markdown"
+            }
+          },
+          "id": "cell-md-3",
+          "type": "notebook_cells"
+        },
+        {
+          "attributes": {
+            "definition": {
+              "text": "### Signal interpretation",
+              "type": "markdown"
+            }
+          },
+          "id": "cell-md-4",
+          "type": "notebook_cells"
+        },
+        {
+          "attributes": {
+            "definition": {
+              "text": "### Recovery criteria",
+              "type": "markdown"
+            }
+          },
+          "id": "cell-md-5",
+          "type": "notebook_cells"
+        }
+      ],
+      "name": "Example worker notebook regression fixture",
+      "status": "published",
+      "template_variables": [
+        {
+          "available_values": ["production", "acceptance"],
+          "defaults": ["production"],
+          "name": "environment",
+          "prefix": "kube_namespace"
+        }
+      ],
+      "time": {"live_span": "4h"}
+    },
+    "type": "notebooks"
+  }
+}
